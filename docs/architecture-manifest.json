@@ -1,0 +1,231 @@
+{
+    "backend_components": [
+        {
+            "name": "main.py",
+            "path": "backend/main.py",
+            "purpose": "Main FastAPI application entry point, defining all API endpoints and orchestrating services.",
+            "internal_dependencies": [
+                "backend.config", "backend.database", "backend.models",
+                "backend.storage_providers", "backend.auth", "backend.utils", "backend.schemas"
+            ],
+            "external_dependencies": [
+                "fastapi", "uvicorn", "pydantic", "sqlalchemy", "python-jose",
+                "passlib", "httpx", "json", "base64", "secrets", "datetime", "typing",
+                "logging", "collections"
+            ]
+        },
+        {
+            "name": "config.py",
+            "path": "backend/config.py",
+            "purpose": "Defines application-wide settings and cloud provider configurations.",
+            "internal_dependencies": [],
+            "external_dependencies": ["pydantic_settings", "os"]
+        },
+        {
+            "name": "database.py",
+            "path": "backend/database.py",
+            "purpose": "Manages database connection, session creation, and SQLAlchemy base.",
+            "internal_dependencies": ["backend.config"],
+            "external_dependencies": [
+                "sqlalchemy.create_engine", "sqlalchemy.orm.sessionmaker",
+                "sqlalchemy.ext.declarative.declarative_base"
+            ]
+        },
+        {
+            "name": "models.py",
+            "path": "backend/models.py",
+            "purpose": "Defines SQLAlchemy ORM models for database entities.",
+            "internal_dependencies": ["backend.database"],
+            "external_dependencies": ["sqlalchemy", "sqlalchemy.orm", "datetime"]
+        },
+        {
+            "name": "schemas.py",
+            "path": "backend/schemas.py",
+            "purpose": "Defines Pydantic schemas for request and response data models.",
+            "internal_dependencies": [],
+            "external_dependencies": ["pydantic", "datetime", "typing"]
+        },
+        {
+            "name": "auth.py",
+            "path": "backend/auth.py",
+            "purpose": "Handles user authentication, password hashing, JWT token creation, and verification.",
+            "internal_dependencies": ["backend.config", "backend.models"],
+            "external_dependencies": ["passlib.context.CryptContext", "python_jose.jwt", "datetime", "typing"]
+        },
+        {
+            "name": "storage_providers/__init__.py",
+            "path": "backend/storage_providers/__init__.py",
+            "purpose": "Initializes the storage provider module and provides factory functions.",
+            "internal_dependencies": [
+                "backend.storage_providers.dropbox",
+                "backend.storage_providers.google_drive",
+                "backend.storage_providers.onedrive"
+            ],
+            "external_dependencies": []
+        },
+        {
+            "name": "storage_providers/base.py",
+            "path": "backend/storage_providers/base.py",
+            "purpose": "Abstract base class for all cloud storage providers.",
+            "internal_dependencies": ["backend.config"],
+            "external_dependencies": ["abc", "typing", "httpx", "json", "asyncio"]
+        },
+        {
+            "name": "storage_providers/dropbox.py",
+            "path": "backend/storage_providers/dropbox.py",
+            "purpose": "Implements the BaseProvider for Dropbox.",
+            "internal_dependencies": ["backend.config", "backend.storage_providers.base"],
+            "external_dependencies": ["typing", "httpx", "json", "urllib.parse"]
+        },
+        {
+            "name": "storage_providers/google_drive.py",
+            "path": "backend/storage_providers/google_drive.py",
+            "purpose": "Implements the BaseProvider for Google Drive.",
+            "internal_dependencies": ["backend.config", "backend.storage_providers.base"],
+            "external_dependencies": ["typing", "httpx", "urllib.parse"]
+        },
+        {
+            "name": "storage_providers/onedrive.py",
+            "path": "backend/storage_providers/onedrive.py",
+            "purpose": "Implements the BaseProvider for Microsoft OneDrive.",
+            "internal_dependencies": ["backend.config", "backend.storage_providers.base"],
+            "external_dependencies": ["typing", "httpx", "urllib.parse"]
+        },
+        {
+            "name": "utils.py",
+            "path": "backend/utils.py",
+            "purpose": "Provides utility functions for security and file operations.",
+            "internal_dependencies": ["backend.config", "backend.models"],
+            "external_dependencies": ["cryptography.fernet.Fernet", "base64", "typing", "datetime"]
+        },
+        {
+            "name": "app.py",
+            "path": "backend/app.py",
+            "purpose": "(Unclear purpose, potentially unused or alternative entry - assumed empty/minimal)",
+            "internal_dependencies": [],
+            "external_dependencies": []
+        }
+    ],
+    "frontend_components": [
+        {
+            "name": "App.js",
+            "path": "frontend/src/App.js",
+            "purpose": "Main React application component, setting up routing and overall layout.",
+            "internal_dependencies": [
+                "./pages/AuthCallback", "./pages/Dashboard", "./pages/Duplicates",
+                "./pages/Files", "./pages/Landing", "./pages/Login",
+                "./pages/ModeSelection", "./pages/Register", "./pages/Settings",
+                "./components/PrivateRoute", "./components/Layout"
+            ],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material/styles", "@mui/material"]
+        },
+        {
+            "name": "index.js",
+            "path": "frontend/src/index.js",
+            "purpose": "Entry point for the React application, renders App component and sets up global providers.",
+            "internal_dependencies": ["./App", "./index.css"],
+            "external_dependencies": [
+                "react", "react-dom/client", "@mui/material/styles",
+                "@mui/material/CssBaseline", "@emotion/react", "@emotion/styled"
+            ]
+        },
+        {
+            "name": "config.js",
+            "path": "frontend/src/config.js",
+            "purpose": "Defines frontend-specific configuration, primarily the backend API URL.",
+            "internal_dependencies": [],
+            "external_dependencies": []
+        },
+        {
+            "name": "services/api.js",
+            "path": "frontend/src/services/api.js",
+            "purpose": "Centralized module for making API calls to the backend, handles authentication.",
+            "internal_dependencies": ["../config"],
+            "external_dependencies": ["axios"]
+        },
+        {
+            "name": "pages/Landing.js",
+            "path": "frontend/src/pages/Landing.js",
+            "purpose": "Public landing page of the application.",
+            "internal_dependencies": [],
+            "external_dependencies": ["react", "@mui/material"]
+        },
+        {
+            "name": "pages/Login.js",
+            "path": "frontend/src/pages/Login.js",
+            "purpose": "Handles user login, authenticates with the backend, and redirects.",
+            "internal_dependencies": ["../../services/api"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "pages/Register.js",
+            "path": "frontend/src/pages/Register.js",
+            "purpose": "Handles new user registration, communicates with the backend, and redirects.",
+            "internal_dependencies": ["../../services/api"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "pages/ModeSelection.js",
+            "path": "frontend/src/pages/ModeSelection.js",
+            "purpose": "Page where users select their desired access mode.",
+            "internal_dependencies": [],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "pages/AuthCallback.js",
+            "path": "frontend/src/pages/AuthCallback.js",
+            "purpose": "Handles OAuth callback from cloud providers, processes tokens, and redirects.",
+            "internal_dependencies": ["../../services/api"],
+            "external_dependencies": ["react", "react-router-dom"]
+        },
+        {
+            "name": "pages/Dashboard.js",
+            "path": "frontend/src/pages/Dashboard.js",
+            "purpose": "Displays an overview of connected storage accounts and triggers syncs.",
+            "internal_dependencies": ["../../services/api", "../../components/Layout"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "pages/Files.js",
+            "path": "frontend/src/pages/Files.js",
+            "purpose": "Displays a list of all files, with filtering, searching, and sorting.",
+            "internal_dependencies": ["../../services/api", "../../components/Layout", "../../components/FileIcon"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material", "react-icons/fa"]
+        },
+        {
+            "name": "pages/Duplicates.js",
+            "path": "frontend/src/pages/Duplicates.js",
+            "purpose": "Displays groups of duplicate files and allows removal.",
+            "internal_dependencies": ["../../services/api", "../../components/Layout", "../../components/FileIcon"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "pages/Settings.js",
+            "path": "frontend/src/pages/Settings.js",
+            "purpose": "Provides user settings management.",
+            "internal_dependencies": ["../../components/Layout"],
+            "external_dependencies": ["react", "@mui/material"]
+        },
+        {
+            "name": "components/Layout.js",
+            "path": "frontend/src/components/Layout.js",
+            "purpose": "Provides a consistent layout structure for the application.",
+            "internal_dependencies": ["../services/api"],
+            "external_dependencies": ["react", "react-router-dom", "@mui/material"]
+        },
+        {
+            "name": "components/PrivateRoute.js",
+            "path": "frontend/src/components/PrivateRoute.js",
+            "purpose": "Protects routes, ensuring only authenticated users can access them.",
+            "internal_dependencies": [],
+            "external_dependencies": ["react", "react-router-dom"]
+        },
+        {
+            "name": "components/FileIcon.js",
+            "path": "frontend/src/components/FileIcon.js",
+            "purpose": "Utility component to display appropriate icons based on file type.",
+            "internal_dependencies": [],
+            "external_dependencies": ["react", "react-icons/fa"]
+        }
+    ]
+}

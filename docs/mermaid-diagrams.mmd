@@ -1,0 +1,287 @@
+graph TD
+    User[User] -->|Accesses via Browser| Frontend[React Frontend]
+    Frontend -->|HTTP/HTTPS API Calls| Backend[FastAPI Backend]
+
+    subgraph Backend Services
+        Backend -->|DB Operations (SQLAlchemy)| Database[(PostgreSQL/SQLite)]
+        Backend -->|OAuth 2.0 / API Calls| CloudProviders[Cloud Storage Providers<br>(Google Drive, Dropbox, OneDrive)]
+        Backend -->|Async Task Queue (Celery - inferred)| BackgroundWorkers[Background Workers]
+    end
+
+    BackgroundWorkers -->|File Sync, Deduplication| CloudProviders
+    Database -->|Stores encrypted tokens, metadata| Backend
+
+    style Frontend fill:#f9f,stroke:#333,stroke-width:2px
+    style Backend fill:#bbf,stroke:#333,stroke-width:2px
+    style Database fill:#ccf,stroke:#333,stroke-width:2px
+    style CloudProviders fill:#fcc,stroke:#333,stroke-width:2px
+    style BackgroundWorkers fill:#cfc,stroke:#333,stroke-width:2px
+
+### Internal and External Dependencies Graph (Node->Node)
+graph TD
+    FE[React Frontend] -->|API Calls| BE(FastAPI Backend)
+
+    subgraph Backend
+        BE --> DB[(Database)]
+        BE --> CP[Cloud Providers API]
+        BE --> BG(Background Tasks)
+        BE --> CFG[Configuration]
+        BE --> AUTH[Authentication/AuthZ]
+        BE --> SP[Storage Providers Interface]
+        BE --> UT[Utilities]
+        BE --> SCH[Schemas]
+
+        AUTH --> CFG
+        AUTH --> DB
+
+        SP --> CFG
+        SP --> UT
+        SP --> CP
+
+        BG --> DB
+        BG --> SP
+        BG --> UT
+        BG --> CFG
+
+        DB --> CFG
+
+        SCH --> BE
+        CFG --> BE
+        UT --> BE
+    end
+
+    subgraph Frontend
+        FE_APP[App.js] --> FE_PAGES[Pages/*]
+        FE_APP --> FE_COMP[Components/*]
+        FE_APP --> FE_AUTH[AuthCallback.js]
+        FE_APP --> FE_CFG[config.js]
+        FE_APP --> FE_API[services/api.js]
+
+        FE_PAGES --> FE_COMP
+        FE_PAGES --> FE_API
+        FE_PAGES --> FE_CFG
+
+        FE_AUTH --> FE_API
+        FE_API --> FE_CFG
+        FE_COMP --> FE_API
+    end
+
+    style FE fill:#f9f,stroke:#333,stroke-width:2px
+    style BE fill:#bbf,stroke:#333,stroke-width:2px
+    style DB fill:#ccf,stroke:#333,stroke-width:2px
+    style CP fill:#fcc,stroke:#333,stroke-width:2px
+    style BG fill:#cfc,stroke:#333,stroke-width:2px
+    style CFG fill:#cff,stroke:#333,stroke-width:2px
+    style AUTH fill:#ffc,stroke:#333,stroke-width:2px
+    style SP fill:#ddc,stroke:#333,stroke-width:2px
+    style UT fill:#cdc,stroke:#333,stroke-width:2px
+    style SCH fill:#eee,stroke:#333,stroke-width:2px
+    style FE_APP fill:#f9f,stroke:#333,stroke-width:1px
+    style FE_PAGES fill:#fef,stroke:#333,stroke-width:1px
+    style FE_COMP fill:#efe,stroke:#333,stroke-width:1px
+    style FE_AUTH fill:#ffc,stroke:#333,stroke-width:1px
+    style FE_CFG fill:#cff,stroke:#333,stroke-width:1px
+    style FE_API fill:#eef,stroke:#333,stroke-width:1px
+
+### User Login Sequence Diagram
+
+sequenceDiagram
+    participant User as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant DB as Database
+    participant AUTH as AuthHandler
+
+    User->>FE: Enters credentials (email, password)
+    activate FE
+    FE->>BE: POST /api/login (UserLogin)
+    activate BE
+    BE->>DB: Query User by email
+    activate DB
+    DB-->>BE: User record
+    deactivate DB
+    BE->>AUTH: Verify password
+    activate AUTH
+    AUTH-->>BE: Password verification result
+    deactivate AUTH
+
+    alt Successful Login
+        BE->>AUTH: Create JWT Token (user_id)
+        activate AUTH
+        AUTH-->>BE: JWT Access Token
+        deactivate AUTH
+        BE-->>FE: 200 OK (access_token, user_id, email)
+        deactivate BE
+        FE->>FE: Store JWT in localStorage
+        FE->>FE: Redirect to /modeselection
+    else Failed Login
+        BE-->>FE: 401 Unauthorized (error detail)
+        deactivate BE
+        FE->>User: Display error message
+    end
+    deactivate FE
+
+    Note right of FE: Interaction: Synchronous, Reliable, Non-idempotent (login attempts increment failed count usually)
+    Note right of BE: Interaction: Synchronous, Reliable, Non-idempotent (password hashing)
+    Note right of DB: Interaction: Synchronous, Reliable, Idempotent (read), Non-idempotent (write - if tracking login attempts)
+
+### Connect Cloud Storage Account (OAuth 2.0) Sequence Diagram
+
+sequenceDiagram
+    participant User as User
+    participant FE as Frontend
+    participant BE as Backend
+    participant CP as Cloud Provider OAuth Server
+    participant DB as Database
+    participant SP as StorageProvider
+    participant BG as BackgroundTasks
+
+    User->>FE: Selects Provider & Mode (Dashboard)
+    activate FE
+    FE->>BE: GET /api/auth/{provider}?mode={mode} (JWT in header)
+    activate BE
+    BE->>DB: Verify user (via JWT)
+    activate DB
+    DB-->>BE: User details
+    deactivate DB
+    BE->>CFG: Get provider config (client_id, redirect_uri, scopes)
+    activate CFG
+    CFG-->>BE: Provider config
+    deactivate CFG
+    BE->>SP: Get Authorization URL (client_id, redirect_uri, state, scopes)
+    activate SP
+    SP-->>BE: OAuth URL
+    deactivate SP
+    BE-->>FE: 200 OK (oauth_url)
+    deactivate BE
+    FE->>CP: Redirect browser to OAuth URL
+    deactivate FE
+
+    activate CP
+    CP->>User: Display consent screen
+    User->>CP: Grants permissions
+    CP->>BE: GET /api/auth/{provider}/{callback_suffix}-callback?code=...&state=...
+    deactivate CP
+    activate BE
+    BE->>DB: Decode state, get user & mode
+    activate DB
+    DB-->>BE: User details
+    deactivate DB
+    BE->>CFG: Get provider config for callback
+    activate CFG
+    CFG-->>BE: Provider config
+    deactivate CFG
+    BE->>SP: Exchange code for tokens (client_id, secret, redirect_uri, scopes)
+    activate SP
+    SP-->>BE: Access/Refresh Tokens
+    deactivate SP
+    BE->>SP: Get Cloud User Info
+    activate SP
+    SP-->>BE: Cloud user email
+    deactivate SP
+    BE->>DB: Find/Create StorageAccount (user, provider, email, mode)
+    activate DB
+    DB-->>BE: StorageAccount (updated/new)
+    deactivate DB
+    BE->>BG: Add sync_account_files task (account_id, db_session, user_id, security_utils)
+    activate BG
+    BG-->>BE: Task added confirmation
+    deactivate BG
+    BE->>AUTH: Create JWT for internal user
+    activate AUTH
+    AUTH-->>BE: New JWT
+    deactivate AUTH
+    BE-->>FE: 307 Redirect to /auth/success?token=...&mode=...
+    deactivate BE
+    activate FE
+    FE->>FE: Store new JWT, extract mode
+    FE->>FE: Redirect to /dashboard?mode={mode}
+    deactivate FE
+
+    Note over FE,BE: Initial auth URL request is synchronous.
+    Note over CP,BE: OAuth callback is an external-to-internal asynchronous redirect.
+    Note right of BE: Token exchange and DB operations are synchronous within the callback.
+    Note right of BG: File sync is an asynchronous, best-effort background task.
+    Note right of DB: Data storage (StorageAccount) is non-idempotent (creates/updates).
+
+### File Synchronization Asynchronous Flow
+
+sequenceDiagram
+    participant SyncTrigger as SyncTrigger (Manual/Automatic)
+    participant BE as FastAPI Backend
+    participant BG as BackgroundTasks (or Celery Worker)
+    participant DB as Database
+    participant SP as StorageProvider Interface
+    participant CP as Cloud Provider API
+    participant UT as Utility (Security/File)
+
+    SyncTrigger->>BE: POST /api/storage-accounts/{id}/sync (or internal call from auth_callback)
+    activate BE
+    BE->>BG: Add sync_account_files task (account_id, db_session, user_id, security_utils)
+    BE-->>SyncTrigger: 200 OK (Sync started message)
+    deactivate BE
+
+    activate BG
+    BG->>DB: Fetch StorageAccount by ID and User ID
+    activate DB
+    DB-->>BG: StorageAccount details
+    deactivate DB
+    BG->>UT: Decrypt access/refresh tokens
+    activate UT
+    UT-->>BG: Decrypted tokens
+    deactivate UT
+    BG->>DB: Create SyncLog entry (status: running)
+    activate DB
+    DB-->>BG: SyncLog ID
+    deactivate DB
+    BG->>DB: Delete existing FileMetadata for account (to prevent orphans)
+    activate DB
+    DB-->>BG: Deletion confirmed
+    deactivate DB
+    BG->>SP: Initialize Provider (with decrypted tokens, mode)
+    activate SP
+    SP-->>BG: Provider instance
+    deactivate SP
+
+    opt Token Refresh Needed
+        BG->>SP: Refresh Access Token
+        activate SP
+        SP->>CP: POST /oauth2/v4/token (or similar)
+        activate CP
+        CP-->>SP: New Access Token
+        deactivate CP
+        SP-->>BG: New Access Token
+        deactivate SP
+        BG->>UT: Encrypt new Access Token
+        activate UT
+        UT-->>BG: Encrypted Token
+        deactivate UT
+        BG->>DB: Update StorageAccount with new token
+        activate DB
+        DB-->>BG: Update confirmed
+        deactivate DB
+    end
+
+    loop until no more pages
+        BG->>CP: list_files(page_token, max_results)
+        activate CP
+        CP-->>BG: File metadata list, next_page_token
+        deactivate CP
+        BG->>DB: Insert/Update FileMetadata records (per file)
+        activate DB
+        DB-->>BG: Records updated
+        deactivate DB
+    end
+
+    BG->>DB: Deactivate old FileMetadata records (not in current sync)
+    activate DB
+    DB-->>BG: Old records deactivated
+    deactivate DB
+    BG->>DB: Update SyncLog (status: completed/failed, stats)
+    activate DB
+    DB-->>BG: SyncLog updated
+    deactivate DB
+    deactivate BG
+
+    Note over BG,CP: Interaction: Asynchronous, Best-effort (retries are implied but not explicit in diagram), Idempotent (re-run effectively recreates state after initial cleanup).
+    Note over BG,DB: Interaction: Synchronous for individual DB operations, Reliable (transactions used).

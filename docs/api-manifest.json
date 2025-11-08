@@ -1,0 +1,340 @@
+[
+    {
+        "method": "POST",
+        "path": "/api/register",
+        "controller_file": "backend/main.py",
+        "purpose": "Register a new user with the application.",
+        "authentication": "None",
+        "request_schema": {
+            "email": {"type": "string", "format": "email"},
+            "password": {"type": "string", "minLength": 8},
+            "name": {"type": "string"}
+        },
+        "response_schema": {
+            "id": {"type": "integer"},
+            "email": {"type": "string", "format": "email"},
+            "name": {"type": "string"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "storage_accounts_count": {"type": "integer"},
+            "total_files_count": {"type": "integer"}
+        },
+        "error_codes": [{"code": 400, "detail": "Email already registered"}]
+    },
+    {
+        "method": "POST",
+        "path": "/api/login",
+        "controller_file": "backend/main.py",
+        "purpose": "Authenticate an existing user and return a JWT access token.",
+        "authentication": "None",
+        "request_schema": {
+            "email": {"type": "string", "format": "email"},
+            "password": {"type": "string"}
+        },
+        "response_schema": {
+            "message": {"type": "string"},
+            "access_token": {"type": "string"},
+            "token_type": {"type": "string"},
+            "user_id": {"type": "integer"},
+            "email": {"type": "string", "format": "email"}
+        },
+        "error_codes": [{"code": 401, "detail": "Incorrect email or password"}]
+    },
+    {
+        "method": "GET",
+        "path": "/api/auth/{provider}",
+        "controller_file": "backend/main.py",
+        "purpose": "Initiate the OAuth 2.0 authorization flow for a specified cloud provider and access mode.",
+        "authentication": "JWT Token",
+        "path_parameters": {"provider": {"type": "string", "enum": ["google_drive", "dropbox", "onedrive"]}},
+        "query_parameters": {"mode": {"type": "string", "enum": ["metadata-only", "read-write"]}},
+        "response_schema": {
+            "oauth_url": {"type": "string", "format": "uri"}
+        },
+        "error_codes": [
+            {"code": 400, "detail": "Unsupported provider"},
+            {"code": 400, "detail": "Unsupported mode"},
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 500, "detail": "Provider configuration missing"}
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/auth/{provider}/{callback_suffix}-callback",
+        "controller_file": "backend/main.py",
+        "purpose": "Callback endpoint for OAuth 2.0 flow. Handles authorization code, exchanges it for tokens, stores account details, triggers initial file sync, and redirects to the frontend.",
+        "authentication": "None (OAuth flow)",
+        "path_parameters": {
+            "provider": {"type": "string", "enum": ["google_drive", "dropbox", "onedrive"]},
+            "callback_suffix": {"type": "string"}
+        },
+        "query_parameters": {
+            "code": {"type": "string"},
+            "state": {"type": "string"}
+        },
+        "response_schema": {"type": "redirect"},
+        "error_codes": [{"code": 307, "detail": "Redirect to frontend error page"}]
+    },
+    {
+        "method": "GET",
+        "path": "/api/health",
+        "controller_file": "backend/main.py",
+        "purpose": "Health check endpoint to determine if the backend service is running.",
+        "authentication": "None",
+        "response_schema": {
+            "status": {"type": "string"},
+            "timestamp": {"type": "string", "format": "date-time"}
+        },
+        "error_codes": []
+    },
+    {
+        "method": "GET",
+        "path": "/api/user",
+        "controller_file": "backend/main.py",
+        "purpose": "Retrieve information about the currently authenticated user.",
+        "authentication": "JWT Token",
+        "response_schema": {
+            "id": {"type": "integer"},
+            "email": {"type": "string", "format": "email"},
+            "name": {"type": "string"},
+            "created_at": {"type": "string", "format": "date-time"},
+            "storage_accounts_count": {"type": "integer"},
+            "total_files_count": {"type": "integer"}
+        },
+        "error_codes": [{"code": 401, "detail": "Invalid or expired token"}]
+    },
+    {
+        "method": "GET",
+        "path": "/api/storage-accounts",
+        "controller_file": "backend/main.py",
+        "purpose": "Retrieve a list of all cloud storage accounts connected by the current user.",
+        "authentication": "JWT Token",
+        "response_schema": {
+            "type": "array",
+            "items": {
+                "id": {"type": "integer"},
+                "provider": {"type": "string", "enum": ["google_drive", "dropbox", "onedrive"]},
+                "mode": {"type": "string", "enum": ["metadata-only", "read-write"]},
+                "account_email": {"type": "string", "format": "email"},
+                "is_active": {"type": "boolean"},
+                "last_sync": {"type": "string", "format": "date-time", "nullable": true},
+                "created_at": {"type": "string", "format": "date-time"},
+                "files_count": {"type": "integer"}
+            }
+        },
+        "error_codes": [{"code": 401, "detail": "Invalid or expired token"}]
+    },
+    {
+        "method": "POST",
+        "path": "/api/storage-accounts/{account_id}/sync",
+        "controller_file": "backend/main.py",
+        "purpose": "Trigger a background synchronization process for a specific connected storage account.",
+        "authentication": "JWT Token",
+        "path_parameters": {"account_id": {"type": "integer"}},
+        "response_schema": {
+            "message": {"type": "string"},
+            "account_id": {"type": "integer"}
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 404, "detail": "Storage account not found"}
+        ]
+    },
+    {
+        "method": "DELETE",
+        "path": "/api/storage-accounts/{account_id}",
+        "controller_file": "backend/main.py",
+        "purpose": "Delete a connected storage account and all its associated file metadata from the database.",
+        "authentication": "JWT Token",
+        "path_parameters": {"account_id": {"type": "integer"}},
+        "response_schema": {
+            "message": {"type": "string"}
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 404, "detail": "Storage account not found"},
+            {"code": 500, "detail": "Failed to delete storage account"}
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/files",
+        "controller_file": "backend/main.py",
+        "purpose": "Retrieve a paginated, filterable, and sortable list of file metadata for the current user.",
+        "authentication": "JWT Token",
+        "query_parameters": {
+            "provider": {"type": "string", "enum": ["google_drive", "dropbox", "onedrive"], "nullable": true},
+            "search": {"type": "string", "nullable": true},
+            "sort_by": {"type": "string", "default": "modified_at_source"},
+            "sort_order": {"type": "string", "enum": ["asc", "desc"], "default": "desc"},
+            "page": {"type": "integer", "default": 1},
+            "per_page": {"type": "integer", "default": 50},
+            "mode": {"type": "string", "enum": ["metadata-only", "read-write"], "nullable": true}
+        },
+        "response_schema": {
+            "files": {"type": "array", "items": {
+                "id": {"type": "integer"},
+                "storage_account_id": {"type": "integer"},
+                "provider": {"type": "string"},
+                "provider_file_id": {"type": "string"},
+                "name": {"type": "string"},
+                "path": {"type": "string"},
+                "mime_type": {"type": "string"},
+                "size": {"type": "integer"},
+                "size_formatted": {"type": "string"},
+                "created_at_source": {"type": "string", "format": "date-time"},
+                "modified_at_source": {"type": "string", "format": "date-time"},
+                "content_hash": {"type": "string", "nullable": true},
+                "preview_link": {"type": "string", "format": "uri", "nullable": true},
+                "is_active": {"type": "boolean"}
+            }},
+            "total": {"type": "integer"},
+            "page": {"type": "integer"},
+            "per_page": {"type": "integer"},
+            "total_pages": {"type": "integer"}
+        },
+        "error_codes": [{"code": 401, "detail": "Invalid or expired token"}]
+    },
+    {
+        "method": "GET",
+        "path": "/api/files/{file_id}/preview",
+        "controller_file": "backend/main.py",
+        "purpose": "Get a temporary preview link for a specific file.",
+        "authentication": "JWT Token",
+        "path_parameters": {"file_id": {"type": "integer"}},
+        "response_schema": {
+            "preview_url": {"type": "string", "format": "uri"}
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 403, "detail": "File preview not allowed for metadata-only accounts"},
+            {"code": 404, "detail": "File not found"},
+            {"code": 500, "detail": "Failed to generate preview link"}
+        ]
+    },
+    {
+        "method": "POST",
+        "path": "/api/files/upload",
+        "controller_file": "backend/main.py",
+        "purpose": "Upload a new file to a specified cloud storage provider and associate it with a connected account.",
+        "authentication": "JWT Token",
+        "query_parameters": {
+            "provider": {"type": "string", "enum": ["google_drive", "dropbox", "onedrive"]},
+            "folder_path": {"type": "string", "default": "/"}
+        },
+        "request_schema": {"file": {"type": "string", "format": "binary"}},
+        "response_schema": {
+            "message": {"type": "string"},
+            "file": {
+                "id": {"type": "integer"},
+                "storage_account_id": {"type": "integer"},
+                "provider": {"type": "string"},
+                "provider_file_id": {"type": "string"},
+                "name": {"type": "string"},
+                "path": {"type": "string"},
+                "mime_type": {"type": "string"},
+                "size": {"type": "integer"},
+                "size_formatted": {"type": "string"},
+                "created_at_source": {"type": "string", "format": "date-time"},
+                "modified_at_source": {"type": "string", "format": "date-time"},
+                "content_hash": {"type": "string", "nullable": true},
+                "preview_link": {"type": "string", "format": "uri", "nullable": true},
+                "is_active": {"type": "boolean"}
+            }
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 403, "detail": "Uploads not allowed for metadata-only accounts"},
+            {"code": 404, "detail": "Storage account not found"},
+            {"code": 500, "detail": "Failed to upload file"}
+        ]
+    },
+    {
+        "method": "DELETE",
+        "path": "/api/files/{file_id}",
+        "controller_file": "backend/main.py",
+        "purpose": "Delete a specific file from both the cloud storage and the local database.",
+        "authentication": "JWT Token",
+        "path_parameters": {"file_id": {"type": "integer"}},
+        "response_schema": {
+            "message": {"type": "string"}
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 403, "detail": "Deletion not allowed for metadata-only accounts"},
+            {"code": 404, "detail": "File not found"},
+            {"code": 500, "detail": "Failed to delete file"}
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/duplicates",
+        "controller_file": "backend/main.py",
+        "purpose": "Retrieve groups of duplicate files (based on content hash) for the current user.",
+        "authentication": "JWT Token",
+        "query_parameters": {
+            "mode": {"type": "string", "enum": ["metadata-only", "read-write"], "nullable": true}
+        },
+        "response_schema": {
+            "type": "array",
+            "items": {
+                "hash": {"type": "string"},
+                "count": {"type": "integer"},
+                "files": {"type": "array", "items": {
+                    "id": {"type": "integer"},
+                    "storage_account_id": {"type": "integer"},
+                    "provider": {"type": "string"},
+                    "provider_file_id": {"type": "string"},
+                    "name": {"type": "string"},
+                    "path": {"type": "string"},
+                    "mime_type": {"type": "string"},
+                    "size": {"type": "integer"},
+                    "size_formatted": {"type": "string"},
+                    "created_at_source": {"type": "string", "format": "date-time"},
+                    "modified_at_source": {"type": "string", "format": "date-time"},
+                    "content_hash": {"type": "string"},
+                    "preview_link": {"type": "string", "format": "uri", "nullable": true},
+                    "is_active": {"type": "boolean"}
+                }}
+            }
+        },
+        "error_codes": [{"code": 401, "detail": "Invalid or expired token"}]
+    },
+    {
+        "method": "POST",
+        "path": "/api/duplicates/remove",
+        "controller_file": "backend/main.py",
+        "purpose": "Delete a list of selected duplicate files from their respective cloud storage providers and the local database.",
+        "authentication": "JWT Token",
+        "request_schema": {
+            "file_ids": {"type": "array", "items": {"type": "integer"}}
+        },
+        "response_schema": {
+            "message": {"type": "string"},
+            "successful_deletions": {"type": "array", "items": {"type": "integer"}}
+        },
+        "error_codes": [
+            {"code": 401, "detail": "Invalid or expired token"},
+            {"code": 403, "detail": "File deletion not allowed for metadata-only account..."},
+            {"code": 500, "detail": "Some files could not be deleted.", "schema": {"successful_deletions": {"type": "array"}, "failed_deletions": {"type": "array"}, "errors": {"type": "array"}}}
+        ]
+    },
+    {
+        "method": "GET",
+        "path": "/api/stats",
+        "controller_file": "backend/main.py",
+        "purpose": "Retrieve overall statistics for the current user, including total file count, total storage size, provider-specific stats, and duplicate groups count.",
+        "authentication": "JWT Token",
+        "response_schema": {
+            "total_files": {"type": "integer"},
+            "total_size": {"type": "integer"},
+            "total_size_formatted": {"type": "string"},
+            "provider_stats": {"type": "array", "items": {
+                "provider": {"type": "string"},
+                "file_count": {"type": "integer"},
+                "total_size": {"type": "integer"}
+            }},
+            "duplicate_groups": {"type": "integer"}
+        },
+        "error_codes": [{"code": 401, "detail": "Invalid or expired token"}]
+    }
+]
