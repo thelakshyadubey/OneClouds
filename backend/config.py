@@ -152,6 +152,18 @@ PROVIDER_CONFIGS = {
         "authorization_base_url": "https://accounts.google.com/o/oauth2/auth",
         "token_url": "https://oauth2.googleapis.com/token"
     },
+    "google_drive_metadata_only": {  # Added alias for consistency
+        "client_id": settings.GOOGLE_DRIVE_METADATA_CLIENT_ID,
+        "client_secret": settings.GOOGLE_DRIVE_METADATA_CLIENT_SECRET,
+        "redirect_uri": f"{settings.BACKEND_URL}/api/auth/google_drive/metadata-callback",
+        "scopes": [
+            "https://www.googleapis.com/auth/drive.metadata.readonly",
+            "https://www.googleapis.com/auth/userinfo.email",
+            "https://www.googleapis.com/auth/userinfo.profile",
+        ],
+        "authorization_base_url": "https://accounts.google.com/o/oauth2/auth",
+        "token_url": "https://oauth2.googleapis.com/token"
+    },
     "dropbox_full_access": {
         "client_id": settings.DROPBOX_RW_CLIENT_ID,
         "client_secret": settings.DROPBOX_RW_CLIENT_SECRET,

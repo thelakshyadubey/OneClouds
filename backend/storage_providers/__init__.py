@@ -4,7 +4,7 @@ Storage providers package initialization and factory
 
 from .google_drive import GoogleDriveProvider
 from .google_photos import GooglePhotosProvider
-from .onedrive import OneDriveProvider
+from .onedrive_provider import OneDriveProvider  # Updated import
 from .terabox import TeraboxProvider
 from .dropbox_provider import DropboxProvider # Changed from .dropbox
 

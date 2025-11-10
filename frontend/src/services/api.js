@@ -62,54 +62,37 @@ api.interceptors.response.use(
 
 // API Services
 export const authService = {
-  // User login
-  login: async (email, password, deviceFingerprint) => {
+  // User login - simplified without OTP/2FA
+  login: async (email, password) => {
     try {
       const response = await api.post("/api/auth/login", {
         email,
         password,
-        device_fingerprint: deviceFingerprint,
       });
-      const { access_token, refresh_token, requires_2fa, device_trusted } =
-        response.data;
+      const { access_token, refresh_token } = response.data;
       if (access_token && refresh_token) {
         tokenManager.setTokens(access_token, refresh_token);
       }
-      return { access_token, refresh_token, requires_2fa, device_trusted };
+      return { access_token, refresh_token };
     } catch (error) {
       console.error("Login error:", error);
       throw error;
     }
   },
 
-  // User registration
+  // User registration - simplified without OTP
   register: async (email, name, password, confirmPassword) => {
-    return api.post("/api/auth/register", {
+    const response = await api.post("/api/auth/register", {
       email,
       name,
       password,
       confirm_password: confirmPassword,
     });
+    return response.data;
   },
 
-  verifyOtp: async (email, otp, deviceFingerprint = null) => {
-    try {
-      const response = await api.post("/api/auth/verify-otp", {
-        email,
-        otp,
-        device_fingerprint: deviceFingerprint,
-      });
-      const { access_token, refresh_token, requires_2fa, device_trusted } =
-        response.data;
-      if (access_token && refresh_token) {
-        tokenManager.setTokens(access_token, refresh_token);
-      }
-      return { access_token, refresh_token, requires_2fa, device_trusted };
-    } catch (error) {
-      console.error("Error verifying OTP:", error);
-      throw error;
-    }
-  },
+  // OTP verification disabled for now - will be re-implemented later
+  // verifyOtp: async (email, otp, deviceFingerprint = null) => { ... },
 
   // Check authentication status
   checkAuth: async () => {

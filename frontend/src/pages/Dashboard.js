@@ -343,9 +343,7 @@ const Dashboard = () => {
                   <div className="flex items-center space-x-2">
                     <button
                       onClick={() => handleSync(account.id)}
-                      disabled={
-                        syncing[account.id] || account.mode === "metadata"
-                      }
+                      disabled={syncing[account.id]}
                       className="inline-flex items-center px-3 py-2 border border-transparent text-sm leading-4 font-medium rounded-md text-oc-white bg-oc-teal hover:bg-oc-steel disabled:opacity-50 mr-2"
                     >
                       {syncing[account.id] ? (

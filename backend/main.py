@@ -100,6 +100,15 @@ async def get_current_user(
         logger.error(f"JWT verification failed: {e}")
         raise credentials_exception
 
+# Helper function to get the correct provider config key
+def get_provider_config_key(provider: str, mode: str) -> str:
+    """Get the correct config key for a provider and mode combination."""
+    # Handle special case where database stores "metadata" but config uses "metadata_only"
+    if mode == "metadata":
+        return f"{provider}_metadata_only"
+    else:
+        return f"{provider}_{mode}"
+
 # Health check endpoint
 @app.get("/api/health")
 async def health_check():
@@ -107,50 +116,50 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 # Authentication endpoints
-@app.post("/api/auth/register", response_model=schemas.GenericResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/auth/register", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_register: schemas.UserRegister, request: Request, db: Session = Depends(get_db)):
-    """Register a new user, sends OTP for email verification"""
+    """Register a new user - simplified without OTP"""
     print(f"DEBUG: Incoming registration data: {user_register.model_dump_json()}") # Log incoming data
     try:
         if user_register.password != user_register.confirm_password:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match")
 
-        # Validate email format and domain (must be Gmail)
+        # Validate email format
         valid_email = validate_email(user_register.email, check_deliverability=False).email
-        # No longer restricting to Gmail, removing this validation
-        # if not valid_email.lower().endswith('@gmail.com'):
-        #     raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Only Gmail addresses are supported for registration.")
 
         existing_user = db.query(User).filter(User.email == user_register.email).first()
         if existing_user:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Email already registered.")
 
         hashed_password = auth_handler.hash_password(user_register.password)
-        otp_secret = security_utils.generate_otp_secret()
-        email_verification_token = secrets.token_urlsafe(32)
-        email_verification_expires_at = datetime.utcnow() + timedelta(minutes=settings.OTP_TTL_MINUTES)
 
         new_user = User(
             email=user_register.email,
             name=user_register.name,
             hashed_password=hashed_password,
-            otp_secret=otp_secret,
-            is_active=False, # User is inactive until OTP is verified
-            email_verification_token=email_verification_token,
-            email_verification_expires_at=email_verification_expires_at,
-            is_2fa_enabled=False, # 2FA is NOT enabled by default on registration, user must set it up
+            is_active=True, # User is active immediately (no OTP verification)
+            is_2fa_enabled=False,
             mode="full_access" # New users start in full_access mode
         )
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
 
-        # Send OTP email
-        otp = security_utils.generate_otp(otp_secret)
-        await security_utils.send_otp_email(new_user.email, otp)
+        # Generate tokens immediately
+        access_token = auth_handler.create_token(data={"user_id": new_user.id}, token_type="access")
+        refresh_token = auth_handler.create_token(data={"user_id": new_user.id}, token_type="refresh")
 
-        logger.info(f"User {new_user.email} registered. OTP sent for verification.")
-        return schemas.GenericResponse(message="Registration successful. Please check your email for OTP verification.")
+        logger.info(f"User {new_user.email} registered successfully.")
+        return schemas.TokenResponse(
+            access_token=access_token,
+            refresh_token=refresh_token,
+            token_type="bearer",
+            user_id=new_user.id,
+            email=new_user.email,
+            expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
+            requires_2fa=False,
+            device_trusted=True
+        )
     except EmailNotValidError as e:
         print(f"DEBUG: Email validation error: {e}") # Log email validation error
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
@@ -161,68 +170,15 @@ async def register(user_register: schemas.UserRegister, request: Request, db: Se
         logger.error(f"DEBUG: Unexpected error during registration: {e}", exc_info=True) # Log full exception info
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
 
-@app.post("/api/auth/verify-otp", response_model=schemas.TokenResponse)
-async def verify_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
-    """Verify OTP and activate user account, then return tokens."""
-    logger.info(f"DEBUG: OTP verification request for email: {otp_verification.email}")
-    user = db.query(User).filter(User.email == otp_verification.email).first()
-
-    if not user or not user.otp_secret or user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request or user already active.")
-
-    if user.email_verification_expires_at < datetime.utcnow():
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="OTP has expired. Please register again.")
-
-    logger.info(f"DEBUG: Stored OTP secret: {user.otp_secret}, Received OTP: {otp_verification.otp}")
-    if not security_utils.verify_otp(user.otp_secret, otp_verification.otp):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP.")
-
-    user.is_active = True
-    user.otp_verified_at = datetime.utcnow()
-    user.email_verification_token = None
-    user.email_verification_expires_at = None
-    db.commit()
-    db.refresh(user)
-
-    # Generate tokens
-    access_token = auth_handler.create_token(data={"user_id": user.id}, token_type="access")
-    refresh_token = auth_handler.create_token(data={"user_id": user.id}, token_type="refresh")
-
-    # Create a trusted device entry if a fingerprint is provided
-    device_trusted = False
-    if otp_verification.device_fingerprint:
-        existing_device = db.query(TrustedDevice).filter(
-            and_(
-                TrustedDevice.user_id == user.id,
-                TrustedDevice.device_fingerprint == otp_verification.device_fingerprint
-            )
-        ).first()
-        if not existing_device:
-            new_device = TrustedDevice(
-                user_id=user.id,
-                device_fingerprint=otp_verification.device_fingerprint,
-                name=request.headers.get("User-Agent", "Unknown Device") # Use User-Agent as a default name
-            )
-            db.add(new_device)
-            db.commit()
-            db.refresh(new_device)
-        device_trusted = True
-
-    logger.info(f"User {user.email} successfully verified OTP and activated account.")
-    return schemas.TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        user_id=user.id,
-        email=user.email,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        requires_2fa=user.is_2fa_enabled,
-        device_trusted=device_trusted
-    )
+# OTP verification endpoints disabled for testing - will be re-implemented later
+# @app.post("/api/auth/verify-otp", response_model=schemas.TokenResponse)
+# async def verify_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
+#     """Verify OTP and activate user account, then return tokens."""
+#     pass
 
 @app.post("/api/auth/login", response_model=schemas.TokenResponse)
 async def login(user_login: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
-    """Authenticate user, handle 2FA, trusted devices, and return JWT tokens."""
+    """Authenticate user and return JWT tokens - simplified without 2FA/OTP."""
     # Basic rate limiting for login attempts per IP
     ip_address = request.client.host
     if not security_utils.is_allowed(f"login_ip:{ip_address}", settings.FAILED_LOGIN_ATTEMPTS_LIMIT * 2, 300): # 10 attempts in 5 minutes
@@ -234,10 +190,6 @@ async def login(user_login: schemas.UserLogin, request: Request, db: Session = D
         # Increment failed attempts for a non-existent user as well to prevent enumeration
         security_utils.increment_failed_login_attempts(db, None, ip_address) # Pass None for user_id to track by IP
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect email or password.")
-
-    # New: Check if user account is active (email verified)
-    if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Account not active. Please verify your email with OTP.")
 
     # Check if user is locked out
     if user.locked_until and user.locked_until > datetime.utcnow():
@@ -258,56 +210,9 @@ async def login(user_login: schemas.UserLogin, request: Request, db: Session = D
     user.last_login_at = datetime.utcnow()
     db.commit()
 
-    # Device fingerprinting
-    device_fingerprint = security_utils.generate_device_fingerprint(request.headers.get("User-Agent"), ip_address)
-    device_trusted = False
-    # Simplified logic: if a device fingerprint is present, we assume the device is trusted if an existing trusted device is found.
-    # The 'stayLoggedIn' option is removed, so we don't create new trusted devices purely based on it at login.
-    if device_fingerprint:
-        trusted_device = db.query(TrustedDevice).filter(
-            and_(
-                TrustedDevice.user_id == user.id,
-                TrustedDevice.device_fingerprint == device_fingerprint,
-                TrustedDevice.is_active == True
-            )
-        ).first()
-        if trusted_device:
-            device_trusted = True
-            trusted_device.last_used_at = datetime.utcnow()
-            db.commit()
-
-    # 2FA Logic
-    if user.is_2fa_enabled and not device_trusted:
-        # Generate and send new OTP if 2FA is required
-        otp = security_utils.generate_otp(user.otp_secret)
-        await security_utils.send_otp_email(user.email, otp)
-        logger.info(f"User {user.email} requires 2FA. OTP sent.")
-        return schemas.TokenResponse(
-            access_token="", # No access token until 2FA is complete
-            token_type="bearer",
-            user_id=user.id,
-            email=user.email,
-            expires_in=0,
-            requires_2fa=True,
-            device_trusted=False
-        )
-    
-    # If 2FA not enabled or device is trusted, proceed with login
+    # Generate tokens
     access_token = auth_handler.create_token(data={"user_id": user.id}, token_type="access")
     refresh_token = auth_handler.create_token(data={"user_id": user.id}, token_type="refresh")
-
-    # If a device fingerprint exists but is not yet trusted (new device for user), create a trusted device
-    # This happens only if 2FA is NOT enabled or if this is the initial login on a new device.
-    if device_fingerprint and not device_trusted:
-        new_device = TrustedDevice(
-            user_id=user.id,
-            device_fingerprint=device_fingerprint,
-            name=request.headers.get("User-Agent", "Unknown Device")
-        )
-        db.add(new_device)
-        db.commit()
-        db.refresh(new_device)
-        device_trusted = True
 
     logger.info(f"User {user.email} logged in successfully.")
     return schemas.TokenResponse(
@@ -318,54 +223,14 @@ async def login(user_login: schemas.UserLogin, request: Request, db: Session = D
         email=user.email,
         expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
         requires_2fa=False,
-        device_trusted=device_trusted
+        device_trusted=True
     )
 
-@app.post("/api/auth/device/verify-otp", response_model=schemas.TokenResponse)
-async def verify_device_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
-    """Verify OTP for a trusted device and return tokens."""
-    user = db.query(User).filter(User.email == otp_verification.email).first()
-
-    if not user or not user.otp_secret or not user.is_2fa_enabled or not user.is_active:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid request or user not eligible for 2FA.")
-
-    if not security_utils.verify_otp(user.otp_secret, otp_verification.otp):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid OTP.")
-
-    # Generate tokens
-    access_token = auth_handler.create_token(data={"user_id": user.id}, token_type="access")
-    refresh_token = auth_handler.create_token(data={"user_id": user.id}, token_type="refresh")
-
-    device_trusted = False
-    if otp_verification.device_fingerprint:
-        existing_device = db.query(TrustedDevice).filter(
-            and_(
-                TrustedDevice.user_id == user.id,
-                TrustedDevice.device_fingerprint == otp_verification.device_fingerprint
-            )
-        ).first()
-        if not existing_device:
-            new_device = TrustedDevice(
-                user_id=user.id,
-                device_fingerprint=otp_verification.device_fingerprint,
-                name=request.headers.get("User-Agent", "Unknown Device")
-            )
-            db.add(new_device)
-            db.commit()
-            db.refresh(new_device)
-        device_trusted = True
-
-    logger.info(f"User {user.email} successfully verified OTP for device. Device trusted: {device_trusted}")
-    return schemas.TokenResponse(
-        access_token=access_token,
-        refresh_token=refresh_token,
-        token_type="bearer",
-        user_id=user.id,
-        email=user.email,
-        expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
-        requires_2fa=False,
-        device_trusted=device_trusted
-    )
+# OTP 2FA device verification disabled for testing - will be re-implemented later
+# @app.post("/api/auth/device/verify-otp", response_model=schemas.TokenResponse)
+# async def verify_device_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
+#     """Verify OTP for a trusted device and return tokens."""
+#     pass
 
 @app.get("/api/auth/devices", response_model=List[schemas.TrustedDeviceResponse])
 async def get_trusted_devices(current_user: User = Depends(get_current_user), db: Session = Depends(get_db)):
@@ -1057,12 +922,21 @@ async def sync_account_files(
             return
 
         provider_class = get_provider_class(storage_account.provider)
+        
+        # Get the correct config key for this provider and mode
+        config_key = get_provider_config_key(storage_account.provider, storage_account.mode)
+        
+        provider_config = PROVIDER_CONFIGS.get(config_key)
+        if not provider_config:
+            logger.error(f"Sync: Provider config not found for key '{config_key}'")
+            return
+        
         provider_instance = provider_class(
             access_token=security_utils_instance.decrypt_token(storage_account.access_token),
             refresh_token=security_utils_instance.decrypt_token(storage_account.refresh_token) if storage_account.refresh_token else None,
             mode=storage_account.mode,
-            client_id=PROVIDER_CONFIGS.get(f"{storage_account.provider}_{storage_account.mode}")["client_id"],
-            client_secret=PROVIDER_CONFIGS.get(f"{storage_account.provider}_{storage_account.mode}")["client_secret"],
+            client_id=provider_config["client_id"],
+            client_secret=provider_config["client_secret"],
             db_session=db, # Pass the database session
             storage_account_id=storage_account.id # Pass the storage account ID
         )
@@ -1122,7 +996,9 @@ async def sync_account_files(
                         existing_file.is_folder != cloud_file_data.get("is_folder", False) or # Compare is_folder
                         existing_file.size != cloud_file_data.get("size") or
                         existing_file.modified_at_source != cloud_file_data.get("modified_at") or
-                        existing_file.content_hash != cloud_file_data.get("content_hash")):
+                        existing_file.content_hash != cloud_file_data.get("content_hash") or
+                        existing_file.web_view_link != cloud_file_data.get("web_view_link") or # Check if web_view_link changed
+                        existing_file.preview_link != cloud_file_data.get("preview_link")): # Check if preview_link changed
 
                         existing_file.name = cloud_file_data["name"]
                         existing_file.path = cloud_file_data.get("path")
@@ -1246,13 +1122,13 @@ async def sync_all_accounts(
     accounts_to_sync = db.query(StorageAccount).filter(
         and_(
             StorageAccount.user_id == current_user.id,
-            StorageAccount.is_active == True,
-            StorageAccount.mode != "metadata" # Only sync full access accounts
+            StorageAccount.is_active == True
+            # Sync is now allowed for both metadata and full_access modes
         )
     ).all()
 
     if not accounts_to_sync:
-        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active full access storage accounts found for synchronization.")
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="No active storage accounts found for synchronization.")
 
     for account in accounts_to_sync:
         background_tasks.add_task(sync_account_files, account.id, db, current_user.id, security_utils)
@@ -1274,14 +1150,23 @@ async def get_files(
     db: Session = Depends(get_db)
 ):
     """Get user's files with filtering, searching, and sorting"""
-    query = db.query(FileMetadata).filter(FileMetadata.user_id == current_user.id)
+    from sqlalchemy.orm import joinedload
+    
+    query = db.query(FileMetadata).options(joinedload(FileMetadata.storage_account)).filter(FileMetadata.user_id == current_user.id)
     
     # Only show active files by default, unless explicitly requested
     query = query.filter(FileMetadata.is_active == True)
     
+    logger.debug(f"get_files: user_id={current_user.id}, provider={provider}, mode={mode}, search={search}")
+    
+    # Join with StorageAccount if we need to filter by mode or provider
+    needs_join = mode or provider
+    if needs_join:
+        query = query.join(StorageAccount)
+    
     # Apply mode filter
     if mode:
-        query = query.join(StorageAccount).filter(
+        query = query.filter(
             and_(
                 StorageAccount.mode == mode,
                 StorageAccount.user_id == current_user.id # Ensure account belongs to current user
@@ -1290,7 +1175,7 @@ async def get_files(
 
     # Apply provider filter
     if provider:
-        query = query.join(StorageAccount).filter(
+        query = query.filter(
             and_(
                 StorageAccount.provider == provider,
                 StorageAccount.user_id == current_user.id # Ensure provider belongs to current user
@@ -1311,6 +1196,8 @@ async def get_files(
     # Pagination
     total = query.count()
     files = query.offset((page - 1) * per_page).limit(per_page).all()
+    
+    logger.debug(f"get_files: Found {total} total files, returning {len(files)} files for page {page}")
     
     return schemas.FileListResponse(
         files=[file_utils.file_to_response(file) for file in files],
@@ -1688,14 +1575,16 @@ async def upload_file(
         )
         
         logger.info(f"Upload successful, creating metadata for: {file.filename}")
-        # Create file metadata in database
+        # Create file metadata in database - extract file data from result
+        file_data = result.get('file', result)  # Handle both formats
         file_metadata = file_utils.create_file_metadata(
             storage_account.user_id,
             storage_account.id,
-            result
+            file_data
         )
         db.add(file_metadata)
         db.commit()
+        db.refresh(file_metadata)
         
         logger.info(f"File uploaded successfully: {file.filename}")
         return {"message": "File uploaded successfully", "file": file_utils.file_to_response(file_metadata)}
