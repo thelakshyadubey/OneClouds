@@ -5,7 +5,7 @@ Main FastAPI application with comprehensive cloud storage integration
 
 import os
 import secrets
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import logging
 import json
@@ -661,6 +661,7 @@ async def get_storage_accounts(current_user: User = Depends(get_current_user), d
                 account_email=account.account_email,
                 is_active=account.is_active,
                 created_at=account.created_at,
+                last_sync=account.last_sync,  # Added missing field
                 storage_used=account.storage_used,
                 storage_limit=account.storage_limit,
                 files_count=files_count
@@ -989,9 +990,10 @@ async def sync_account_files(
                 computed_size_hash = _compute_size_hash(cloud_file_data.get("name"), cloud_file_data.get("size"), cloud_file_data.get("mime_type"))
 
                 if existing_file:
-                    # Update existing file metadata if changed
+                    # Update existing file metadata if changed OR if it was inactive
                     # Only update fields that might change and are relevant for metadata mode
-                    if (existing_file.name != cloud_file_data["name"] or
+                    if (not existing_file.is_active or  # Always reactivate inactive files
+                        existing_file.name != cloud_file_data["name"] or
                         existing_file.mime_type != cloud_file_data["mime_type"] or
                         existing_file.is_folder != cloud_file_data.get("is_folder", False) or # Compare is_folder
                         existing_file.size != cloud_file_data.get("size") or
@@ -1076,6 +1078,9 @@ async def sync_account_files(
             ).scalar() or 0
             storage_account.storage_used = total_used_bytes
 
+        # Update last_sync timestamp with timezone-aware UTC
+        storage_account.last_sync = datetime.now(timezone.utc)
+        
         db.commit()
         db.refresh(storage_account) # Refresh to get latest storage_used/limit
         
@@ -1699,12 +1704,72 @@ async def get_stats(current_user: User = Depends(get_current_user), db: Session 
         StorageAccount.user_id == current_user.id
     ).group_by(StorageAccount.provider).all()
     
-    duplicate_count = db.query(FileMetadata.content_hash).filter(
+    # Count duplicate groups (same logic as /api/duplicates endpoint)
+    # We need to count groups across multiple detection methods without double-counting files
+    seen_file_ids = set()
+    duplicate_group_count = 0
+    
+    # Count content_hash based groups
+    content_duplicates = db.query(FileMetadata.content_hash, func.count(FileMetadata.id).label('cnt')).filter(
         and_(
             FileMetadata.user_id == current_user.id,
-            FileMetadata.content_hash.isnot(None)
+            FileMetadata.content_hash.isnot(None),
+            FileMetadata.is_active == True
         )
-    ).group_by(FileMetadata.content_hash).having(func.count(FileMetadata.id) > 1).count()
+    ).group_by(FileMetadata.content_hash).having(func.count(FileMetadata.id) > 1).all()
+    
+    for row in content_duplicates:
+        chash = row[0]
+        file_ids = db.query(FileMetadata.id).filter(
+            FileMetadata.user_id == current_user.id,
+            FileMetadata.content_hash == chash,
+            FileMetadata.is_active == True
+        ).all()
+        group_file_ids = [fid[0] for fid in file_ids if fid[0] not in seen_file_ids]
+        if len(group_file_ids) > 1:
+            seen_file_ids.update(group_file_ids)
+            duplicate_group_count += 1
+    
+    # Count size_hash based groups (for files not already in content_hash groups)
+    size_duplicates = db.query(FileMetadata.size_hash, func.count(FileMetadata.id).label('cnt')).filter(
+        and_(
+            FileMetadata.user_id == current_user.id,
+            FileMetadata.size_hash.isnot(None),
+            FileMetadata.is_active == True
+        )
+    ).group_by(FileMetadata.size_hash).having(func.count(FileMetadata.id) > 1).all()
+    
+    for row in size_duplicates:
+        shash = row[0]
+        file_ids = db.query(FileMetadata.id).filter(
+            FileMetadata.user_id == current_user.id,
+            FileMetadata.size_hash == shash,
+            FileMetadata.is_active == True
+        ).all()
+        group_file_ids = [fid[0] for fid in file_ids if fid[0] not in seen_file_ids]
+        if len(group_file_ids) > 1:
+            seen_file_ids.update(group_file_ids)
+            duplicate_group_count += 1
+    
+    # Count name+size based groups (for files not already grouped)
+    name_size_files = db.query(FileMetadata).filter(
+        FileMetadata.user_id == current_user.id,
+        FileMetadata.name.isnot(None),
+        FileMetadata.size.isnot(None),
+        FileMetadata.is_active == True
+    ).all()
+    
+    name_size_groups = defaultdict(list)
+    for f in name_size_files:
+        if f.id not in seen_file_ids:
+            key = (f.name.lower(), f.size)
+            name_size_groups[key].append(f.id)
+    
+    for key, file_ids in name_size_groups.items():
+        if len(file_ids) > 1:
+            duplicate_group_count += 1
+    
+    duplicate_count = duplicate_group_count
     
     # Compute file type distribution
     file_type_distribution_raw = db.query(

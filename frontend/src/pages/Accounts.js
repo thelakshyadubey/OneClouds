@@ -35,8 +35,26 @@ const getProviderName = (providerId) => {
 
 const formatLastSync = (lastSync) => {
   if (!lastSync) return "Never synced";
-  const date = new Date(lastSync);
-  return date.toLocaleString();
+
+  // Ensure the date string is treated as UTC by appending 'Z' if not present
+  let dateString = lastSync;
+  if (!dateString.endsWith("Z") && !dateString.includes("+")) {
+    dateString = dateString + "Z";
+  }
+
+  const date = new Date(dateString);
+
+  // Format with 12-hour time and AM/PM in user's local timezone
+  const options = {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+    hour12: true,
+  };
+
+  return date.toLocaleString("en-US", options);
 };
 
 // Utility to format storage size (bytes to GB or MB)

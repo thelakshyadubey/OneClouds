@@ -13,7 +13,19 @@ class DropboxProvider(CloudStorageProvider):
         super().__init__(access_token, refresh_token, mode)
         self.client_id = client_id
         self.client_secret = client_secret
-        self.dbx = dropbox.Dropbox(access_token)
+        
+        # Initialize Dropbox with app credentials for automatic token refresh
+        if refresh_token and client_id and client_secret:
+            self.dbx = dropbox.Dropbox(
+                oauth2_access_token=access_token,
+                oauth2_refresh_token=refresh_token,
+                app_key=client_id,
+                app_secret=client_secret
+            )
+        else:
+            # Fallback for tokens without refresh capability
+            self.dbx = dropbox.Dropbox(access_token)
+        
         self.db_session = db_session # Store DB session
         self.storage_account_id = storage_account_id # Store storage account ID
     

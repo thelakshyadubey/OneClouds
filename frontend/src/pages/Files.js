@@ -90,12 +90,8 @@ const Files = () => {
     if (mode) {
       setSelectedMode(mode);
     } else {
-      // If no mode is provided, redirect to mode selection
-      // This case should ideally not happen if routing is set up correctly
-      // but is a safeguard.
-      console.warn("No mode selected. Redirecting to mode selection.");
-      // navigate('/modeselection'); // Uncomment if you want to force redirect
-      // return;
+      // If no mode is provided, show all files (set mode to null/empty)
+      setSelectedMode(null);
     }
     fetchFiles();
   }, [location.search, fetchFiles]); // Add fetchFiles to dependency array
