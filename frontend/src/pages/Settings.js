@@ -1,10 +1,33 @@
-import React, { useState, useEffect, useCallback } from 'react';
-import { FaCog, FaUserCircle, FaSync, FaSignOutAlt, FaTimes } from 'react-icons/fa';
-import { useLocation, useNavigate } from 'react-router-dom';
-import api from '../services/api';
-import toast from 'react-hot-toast';
-import { Box, Typography, Button, FormControlLabel, Switch, TextField, MenuItem, Select, InputLabel, FormControl, Dialog, DialogTitle, DialogContent, DialogActions, Checkbox, CircularProgress } from '@mui/material';
-import { FaCloud } from 'react-icons/fa';
+import React, { useState, useEffect, useCallback } from "react";
+import {
+  FaCog,
+  FaUserCircle,
+  FaSync,
+  FaSignOutAlt,
+  FaTimes,
+} from "react-icons/fa";
+import { useLocation, useNavigate } from "react-router-dom";
+import api from "../services/api";
+import toast from "react-hot-toast";
+import {
+  Box,
+  Typography,
+  Button,
+  FormControlLabel,
+  Switch,
+  TextField,
+  MenuItem,
+  Select,
+  InputLabel,
+  FormControl,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Checkbox,
+  CircularProgress,
+} from "@mui/material";
+import { FaCloud } from "react-icons/fa";
 
 const Settings = () => {
   const location = useLocation();
@@ -13,84 +36,100 @@ const Settings = () => {
   const [loadingUser, setLoadingUser] = useState(true);
   const [autoSyncEnabled, setAutoSyncEnabled] = useState(true);
   const [syncInterval, setSyncInterval] = useState(30); // minutes
-  const [theme, setTheme] = useState('light');
+  const [theme, setTheme] = useState("light");
   const [notificationsEnabled, setNotificationsEnabled] = useState(true);
-  const [language, setLanguage] = useState('en');
-  const [showAccountDisconnectConfirm, setShowAccountDisconnectConfirm] = useState(false);
+  const [language, setLanguage] = useState("en");
+  const [showAccountDisconnectConfirm, setShowAccountDisconnectConfirm] =
+    useState(false);
   const [accountToDisconnect, setAccountToDisconnect] = useState(null);
-  const [confirmDisconnectCheckbox, setConfirmDisconnectCheckbox] = useState(false);
+  const [confirmDisconnectCheckbox, setConfirmDisconnectCheckbox] =
+    useState(false);
   const [showModeSwitchConfirm, setShowModeSwitchConfirm] = useState(false);
   const [accountToSwitchMode, setAccountToSwitchMode] = useState(null);
   const [newMode, setNewMode] = useState(null);
-  const [defaultUploadLocation, setDefaultUploadLocation] = useState('__root__'); // Default to root
+  const [defaultUploadLocation, setDefaultUploadLocation] =
+    useState("__root__"); // Default to root
   const [showEmailChangeDialog, setShowEmailChangeDialog] = useState(false);
-  const [newEmail, setNewEmail] = useState('');
-  const [currentPasswordForEmail, setCurrentPasswordForEmail] = useState('');
-  const [showPasswordChangeDialog, setShowPasswordChangeDialog] = useState(false);
-  const [currentPasswordForPassword, setCurrentPasswordForPassword] = useState('');
-  const [newPassword, setNewPassword] = useState('');
-  const [confirmNewPassword, setConfirmNewPassword] = useState('');
+  const [newEmail, setNewEmail] = useState("");
+  const [currentPasswordForEmail, setCurrentPasswordForEmail] = useState("");
+  const [showPasswordChangeDialog, setShowPasswordChangeDialog] =
+    useState(false);
+  const [currentPasswordForPassword, setCurrentPasswordForPassword] =
+    useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmNewPassword, setConfirmNewPassword] = useState("");
   const [show2FASetupDialog, setShow2FASetupDialog] = useState(false);
-  const [setup2FAPassword, setSetup2FAPassword] = useState('');
-  const [twoFAQrCodeUrl, setTwoFAQrCodeUrl] = useState('');
-  const [twoFAOtpInput, setTwoFAOtpInput] = useState('');
-  const [twoFASecret, setTwoFASecret] = useState(''); // To store the secret temporarily for verification
+  const [setup2FAPassword, setSetup2FAPassword] = useState("");
+  const [twoFAQrCodeUrl, setTwoFAQrCodeUrl] = useState("");
+  const [twoFAOtpInput, setTwoFAOtpInput] = useState("");
+  const [twoFASecret, setTwoFASecret] = useState(""); // To store the secret temporarily for verification
   const [is2FAVerified, setIs2FAVerified] = useState(false); // To track if 2FA is in verification step
   const [trustedDevices, setTrustedDevices] = useState([]); // New state for trusted devices
   const [showRevokeDeviceConfirm, setShowRevokeDeviceConfirm] = useState(false);
   const [deviceToRevoke, setDeviceToRevoke] = useState(null);
-  const [showRevokeAllSessionsConfirm, setShowRevokeAllSessionsConfirm] = useState(false);
-  const [currentPasswordForRevokeAll, setCurrentPasswordForRevokeAll] = useState('');
-  const [showAccountDeletionConfirm, setShowAccountDeletionConfirm] = useState(false); // New state for account deletion
-  const [passwordForAccountDeletion, setPasswordForAccountDeletion] = useState('');
-  const [confirmAccountDeletionCheckbox, setConfirmAccountDeletionCheckbox] = useState(false);
+  const [showRevokeAllSessionsConfirm, setShowRevokeAllSessionsConfirm] =
+    useState(false);
+  const [currentPasswordForRevokeAll, setCurrentPasswordForRevokeAll] =
+    useState("");
+  const [showAccountDeletionConfirm, setShowAccountDeletionConfirm] =
+    useState(false); // New state for account deletion
+  const [passwordForAccountDeletion, setPasswordForAccountDeletion] =
+    useState("");
+  const [confirmAccountDeletionCheckbox, setConfirmAccountDeletionCheckbox] =
+    useState(false);
 
   const handleProfileUpdate = (action) => {
-    if (action === 'email') {
-      setNewEmail(user?.email || '');
-      setCurrentPasswordForEmail('');
+    if (action === "email") {
+      setNewEmail(user?.email || "");
+      setCurrentPasswordForEmail("");
       setShowEmailChangeDialog(true);
-    } else if (action === 'password') {
-      setCurrentPasswordForPassword('');
-      setNewPassword('');
-      setConfirmNewPassword('');
+    } else if (action === "password") {
+      setCurrentPasswordForPassword("");
+      setNewPassword("");
+      setConfirmNewPassword("");
       setShowPasswordChangeDialog(true);
-    } else if (action === '2fa') {
+    } else if (action === "2fa") {
       if (user?.is_2fa_enabled) {
-        toast.info("2FA is already enabled. Functionality to disable/reset not yet implemented.");
+        toast(
+          "2FA is already enabled. Functionality to disable/reset not yet implemented."
+        );
       } else {
-        setSetup2FAPassword('');
-        setTwoFAOtpInput('');
-        setTwoFAQrCodeUrl('');
-        setTwoFASecret('');
+        setSetup2FAPassword("");
+        setTwoFAOtpInput("");
+        setTwoFAQrCodeUrl("");
+        setTwoFASecret("");
         setIs2FAVerified(false);
         setShow2FASetupDialog(true);
       }
-    } else if (action === 'account_deletion') {
-      setPasswordForAccountDeletion('');
+    } else if (action === "account_deletion") {
+      setPasswordForAccountDeletion("");
       setConfirmAccountDeletionCheckbox(false);
       setShowAccountDeletionConfirm(true);
     } else {
-      toast.info(`'${action}' functionality not yet implemented.`);
+      toast(`'${action}' functionality not yet implemented.`);
     }
   };
 
   const handleInitiate2FASetup = async () => {
     try {
-      const response = await api.post('/api/user/2fa/setup', { password: setup2FAPassword });
+      const response = await api.post("/api/user/2fa/setup", {
+        password: setup2FAPassword,
+      });
       setTwoFASecret(response.data.otp_secret); // Store secret temporarily for verification
       setTwoFAQrCodeUrl(response.data.qr_code_url);
       setIs2FAVerified(true); // Move to the verification step
       toast.success("2FA setup initiated. Scan the QR code and enter the OTP.");
     } catch (error) {
       console.error("Failed to initiate 2FA setup:", error);
-      toast.error(error.response?.data?.detail || "Failed to initiate 2FA setup.");
+      toast.error(
+        error.response?.data?.detail || "Failed to initiate 2FA setup."
+      );
     }
   };
 
   const handleVerify2FA = async () => {
     try {
-      await api.post('/api/user/2fa/verify', { otp: twoFAOtpInput });
+      await api.post("/api/user/2fa/verify", { otp: twoFAOtpInput });
       toast.success("2FA enabled successfully!");
       setShow2FASetupDialog(false);
       fetchUserProfile(); // Refresh user data to show 2FA status
@@ -102,13 +141,18 @@ const Settings = () => {
 
   const handleSubmitEmailChange = async () => {
     try {
-      await api.put('/api/user/email', { new_email: newEmail, current_password: currentPasswordForEmail });
-      toast.success("Email change initiated. Please check your new email for verification and re-login.");
+      await api.put("/api/user/email", {
+        new_email: newEmail,
+        current_password: currentPasswordForEmail,
+      });
+      toast.success(
+        "Email change initiated. Please check your new email for verification and re-login."
+      );
       setShowEmailChangeDialog(false);
       // Force logout after email change
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      navigate('/login'); // Redirect to login page
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      navigate("/login"); // Redirect to login page
     } catch (error) {
       console.error("Failed to change email:", error);
       toast.error(error.response?.data?.detail || "Failed to change email.");
@@ -121,13 +165,19 @@ const Settings = () => {
       return;
     }
     try {
-      await api.put('/api/user/password', { current_password: currentPasswordForPassword, new_password: newPassword, confirm_new_password: confirmNewPassword });
-      toast.success("Password updated successfully. You have been logged out from all devices.");
+      await api.put("/api/user/password", {
+        current_password: currentPasswordForPassword,
+        new_password: newPassword,
+        confirm_new_password: confirmNewPassword,
+      });
+      toast.success(
+        "Password updated successfully. You have been logged out from all devices."
+      );
       setShowPasswordChangeDialog(false);
       // Force logout after password change
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      navigate('/login'); // Redirect to login page
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      navigate("/login"); // Redirect to login page
     } catch (error) {
       console.error("Failed to change password:", error);
       toast.error(error.response?.data?.detail || "Failed to change password.");
@@ -137,20 +187,21 @@ const Settings = () => {
   const fetchUserProfile = useCallback(async () => {
     setLoadingUser(true);
     try {
-      const response = await api.get('/api/user');
+      const response = await api.get("/api/user");
       setUser(response.data);
       const userPreferences = response.data.preferences; // Access the nested preferences object
       setAutoSyncEnabled(userPreferences?.auto_sync_enabled ?? true);
       setSyncInterval(userPreferences?.sync_interval_minutes ?? 30);
-      setTheme(userPreferences?.theme ?? 'light');
+      setTheme(userPreferences?.theme ?? "light");
       setNotificationsEnabled(userPreferences?.notifications_enabled ?? true);
-      setLanguage(userPreferences?.language ?? 'en');
-      setDefaultUploadLocation(userPreferences?.default_upload_location ?? '__root__'); // Load default upload location
+      setLanguage(userPreferences?.language ?? "en");
+      setDefaultUploadLocation(
+        userPreferences?.default_upload_location ?? "__root__"
+      ); // Load default upload location
 
       // Fetch trusted devices
-      const devicesResponse = await api.get('/api/auth/devices');
+      const devicesResponse = await api.get("/api/auth/devices");
       setTrustedDevices(devicesResponse.data);
-
     } catch (error) {
       console.error("Failed to fetch user profile or preferences:", error);
       toast.error("Failed to load user settings.");
@@ -164,13 +215,23 @@ const Settings = () => {
   }, [fetchUserProfile]);
 
   useEffect(() => {
-    if (location.state?.highlightAccount && location.state?.targetMode) {
-      // Auto-open mode switch confirmation for the specific account
-      // In a real app, you'd fetch account details first, then open dialog
-      // For now, simulating based on passed state
-      setAccountToSwitchMode({ id: location.state.highlightAccount, provider: 'google_drive', account_email: 'example@gmail.com', mode: user?.mode }); // Placeholder
-      setNewMode(location.state.targetMode);
-      setShowModeSwitchConfirm(true);
+    if (
+      location.state?.highlightAccount &&
+      location.state?.targetMode &&
+      user?.storage_accounts
+    ) {
+      // Find the actual account by ID from the user's storage accounts
+      const account = user.storage_accounts.find(
+        (acc) => acc.id === location.state.highlightAccount
+      );
+
+      if (account) {
+        // Use the actual account data
+        setAccountToSwitchMode(account);
+        setNewMode(location.state.targetMode);
+        setShowModeSwitchConfirm(true);
+      }
+
       // Clear state so it doesn't re-trigger
       window.history.replaceState({}, document.title);
     }
@@ -180,8 +241,8 @@ const Settings = () => {
     const newValue = !autoSyncEnabled;
     setAutoSyncEnabled(newValue);
     try {
-      await api.put('/api/user/preferences', { auto_sync_enabled: newValue });
-      toast.success(newValue ? 'Auto-sync enabled.' : 'Auto-sync disabled.');
+      await api.put("/api/user/preferences", { auto_sync_enabled: newValue });
+      toast.success(newValue ? "Auto-sync enabled." : "Auto-sync disabled.");
     } catch (error) {
       console.error("Failed to update auto-sync preference:", error);
       toast.error("Failed to update auto-sync preference.");
@@ -193,8 +254,10 @@ const Settings = () => {
     const newValue = e.target.value;
     setSyncInterval(newValue);
     try {
-      await api.put('/api/user/preferences', { sync_interval_minutes: newValue });
-      toast.success('Sync interval updated.');
+      await api.put("/api/user/preferences", {
+        sync_interval_minutes: newValue,
+      });
+      toast.success("Sync interval updated.");
     } catch (error) {
       console.error("Failed to update sync interval:", error);
       toast.error("Failed to update sync interval.");
@@ -206,8 +269,8 @@ const Settings = () => {
     const newValue = e.target.value;
     setTheme(newValue);
     try {
-      await api.put('/api/user/preferences', { theme: newValue });
-      toast.success('Theme updated.');
+      await api.put("/api/user/preferences", { theme: newValue });
+      toast.success("Theme updated.");
       // Apply theme change to UI (e.g., update a CSS class on body or use context)
     } catch (error) {
       console.error("Failed to update theme preference:", error);
@@ -220,8 +283,12 @@ const Settings = () => {
     const newValue = !notificationsEnabled;
     setNotificationsEnabled(newValue);
     try {
-      await api.put('/api/user/preferences', { notifications_enabled: newValue });
-      toast.success(newValue ? 'Notifications enabled.' : 'Notifications disabled.');
+      await api.put("/api/user/preferences", {
+        notifications_enabled: newValue,
+      });
+      toast.success(
+        newValue ? "Notifications enabled." : "Notifications disabled."
+      );
     } catch (error) {
       console.error("Failed to update notification preference:", error);
       toast.error("Failed to update notifications preference.");
@@ -233,8 +300,8 @@ const Settings = () => {
     const newValue = e.target.value;
     setLanguage(newValue);
     try {
-      await api.put('/api/user/preferences', { language: newValue });
-      toast.success('Language updated.');
+      await api.put("/api/user/preferences", { language: newValue });
+      toast.success("Language updated.");
     } catch (error) {
       console.error("Failed to update language preference:", error);
       toast.error("Failed to update language.");
@@ -246,8 +313,10 @@ const Settings = () => {
     const newValue = e.target.value;
     setDefaultUploadLocation(newValue);
     try {
-      await api.put('/api/user/preferences', { default_upload_location: newValue });
-      toast.success('Default upload location updated.');
+      await api.put("/api/user/preferences", {
+        default_upload_location: newValue,
+      });
+      toast.success("Default upload location updated.");
     } catch (error) {
       console.error("Failed to update default upload location:", error);
       toast.error("Failed to update default upload location.");
@@ -265,14 +334,21 @@ const Settings = () => {
 
     try {
       await api.delete(`/api/storage-accounts/${accountToDisconnect.id}`);
-      toast.success(`${accountToDisconnect.provider.replace('_', ' ')} account disconnected.`);
+      toast.success(
+        `${accountToDisconnect.provider.replace(
+          "_",
+          " "
+        )} account disconnected.`
+      );
       fetchUserProfile(); // Refresh user accounts after disconnect
       setShowAccountDisconnectConfirm(false);
       setAccountToDisconnect(null);
       setConfirmDisconnectCheckbox(false);
     } catch (error) {
-      console.error('Failed to disconnect account:', error);
-      toast.error(error.response?.data?.detail || 'Failed to disconnect account.');
+      console.error("Failed to disconnect account:", error);
+      toast.error(
+        error.response?.data?.detail || "Failed to disconnect account."
+      );
     }
   };
 
@@ -290,20 +366,39 @@ const Settings = () => {
 
   const handleSwitchMode = async () => {
     if (!accountToSwitchMode || !newMode) return;
-    
+
     try {
-      // Redirect to the OAuth flow for the specific account and new mode.
-      // The backend's auth callback will handle updating the account and re-fetching user data.
-      toast.info(`Initiating mode switch for ${accountToSwitchMode.provider.replace('_', ' ')} to ${newMode === 'metadata' ? 'Metadata Mode' : 'Full Access Mode'}. You will be redirected to re-authenticate.`);
-      window.location.href = `/api/auth/${accountToSwitchMode.provider}?mode=${newMode}`;
-      
+      // Call the API to get the OAuth URL with authentication
+      const response = await api.get(
+        `/api/auth/${accountToSwitchMode.provider}`,
+        {
+          params: { mode: newMode },
+        }
+      );
+
+      // Show toast notification
+      toast(
+        `Initiating mode switch for ${accountToSwitchMode.provider.replace(
+          "_",
+          " "
+        )} to ${
+          newMode === "metadata" ? "Metadata Mode" : "Full Access Mode"
+        }. You will be redirected to re-authenticate.`,
+        {
+          duration: 4000,
+        }
+      );
+
+      // Redirect to the OAuth URL from backend response
+      window.location.href = response.data.oauth_url;
+
       // Close the dialog immediately after redirect to prevent user from interacting further
       setShowModeSwitchConfirm(false);
       setAccountToSwitchMode(null);
       setNewMode(null);
     } catch (error) {
-      console.error('Failed to switch mode:', error);
-      toast.error(error.response?.data?.detail || 'Failed to switch mode.');
+      console.error("Failed to switch mode:", error);
+      toast.error(error.response?.data?.detail || "Failed to switch mode.");
     }
   };
 
@@ -338,28 +433,34 @@ const Settings = () => {
   };
 
   const openRevokeAllSessionsConfirm = () => {
-    setCurrentPasswordForRevokeAll('');
+    setCurrentPasswordForRevokeAll("");
     setShowRevokeAllSessionsConfirm(true);
   };
 
   const handleRevokeAllSessions = async () => {
     try {
-      await api.delete('/api/user/sessions/all', { data: { current_password: currentPasswordForRevokeAll } }); // Use data for DELETE with body
-      toast.success("All sessions and trusted devices revoked. You will be logged out.");
+      await api.delete("/api/user/sessions/all", {
+        data: { current_password: currentPasswordForRevokeAll },
+      }); // Use data for DELETE with body
+      toast.success(
+        "All sessions and trusted devices revoked. You will be logged out."
+      );
       setShowRevokeAllSessionsConfirm(false);
       // Force logout after revoking all sessions
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      navigate('/login'); // Redirect to login page
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      navigate("/login"); // Redirect to login page
     } catch (error) {
       console.error("Failed to revoke all sessions:", error);
-      toast.error(error.response?.data?.detail || "Failed to revoke all sessions.");
+      toast.error(
+        error.response?.data?.detail || "Failed to revoke all sessions."
+      );
     }
   };
 
   const handleCancelRevokeAllSessions = () => {
     setShowRevokeAllSessionsConfirm(false);
-    setCurrentPasswordForRevokeAll('');
+    setCurrentPasswordForRevokeAll("");
   };
 
   const handleDeleteAccount = async () => {
@@ -370,13 +471,17 @@ const Settings = () => {
     try {
       // API call to delete user account
       // This endpoint needs to be created in the backend
-      await api.delete('/api/user', { data: { current_password: passwordForAccountDeletion } });
-      toast.success("Your account has been successfully deleted. You will be logged out.");
+      await api.delete("/api/user", {
+        data: { current_password: passwordForAccountDeletion },
+      });
+      toast.success(
+        "Your account has been successfully deleted. You will be logged out."
+      );
       setShowAccountDeletionConfirm(false);
       // Clear tokens and redirect to landing/login page
-      localStorage.removeItem('accessToken');
-      localStorage.removeItem('refreshToken');
-      navigate('/'); // Or '/login' if a dedicated login page exists
+      localStorage.removeItem("accessToken");
+      localStorage.removeItem("refreshToken");
+      navigate("/"); // Or '/login' if a dedicated login page exists
     } catch (error) {
       console.error("Failed to delete account:", error);
       toast.error(error.response?.data?.detail || "Failed to delete account.");
@@ -385,7 +490,7 @@ const Settings = () => {
 
   const handleCancelAccountDeletion = () => {
     setShowAccountDeletionConfirm(false);
-    setPasswordForAccountDeletion('');
+    setPasswordForAccountDeletion("");
     setConfirmAccountDeletionCheckbox(false);
   };
 
@@ -393,7 +498,9 @@ const Settings = () => {
     return (
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8 text-center">
         <CircularProgress className="text-oc-teal" />
-        <Typography sx={{ mt: 2, color: 'text.secondary' }}>Loading settings...</Typography>
+        <Typography sx={{ mt: 2, color: "text.secondary" }}>
+          Loading settings...
+        </Typography>
       </div>
     );
   }
@@ -402,121 +509,109 @@ const Settings = () => {
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-6">
         <h1 className="text-3xl font-bold text-oc-dark">Settings</h1>
-        <p className="text-oc-steel mt-2">Manage your account and application preferences</p>
+        <p className="text-oc-steel mt-2">
+          Manage your account and application preferences
+        </p>
       </div>
 
       {/* User Profile Section */}
-      <Box sx={{ bgcolor: 'background.paper', p: 4, borderRadius: 2, boxShadow: 1, mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 3, color: 'text.primary', display: 'flex', alignItems: 'center' }}>
+      <Box
+        sx={{
+          bgcolor: "background.paper",
+          p: 4,
+          borderRadius: 2,
+          boxShadow: 1,
+          mb: 4,
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            mb: 3,
+            color: "text.primary",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
           <FaUserCircle className="mr-2 text-oc-steel" /> User Profile
         </Typography>
         <Box sx={{ mb: 2 }}>
-          <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>Email:</Typography>
-          <Typography variant="body1" sx={{ color: 'text.primary', fontWeight: 'medium' }}>{user?.email}</Typography>
+          <Typography variant="subtitle1" sx={{ color: "text.secondary" }}>
+            Email:
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{ color: "text.primary", fontWeight: "medium" }}
+          >
+            {user?.email}
+          </Typography>
         </Box>
         <Box sx={{ mb: 3 }}>
-          <Typography variant="subtitle1" sx={{ color: 'text.secondary' }}>Name:</Typography>
-          <Typography variant="body1" sx={{ color: 'text.primary', fontWeight: 'medium' }}>{user?.name || 'N/A'}</Typography>
+          <Typography variant="subtitle1" sx={{ color: "text.secondary" }}>
+            Name:
+          </Typography>
+          <Typography
+            variant="body1"
+            sx={{ color: "text.primary", fontWeight: "medium" }}
+          >
+            {user?.name || "N/A"}
+          </Typography>
         </Box>
-        <Button variant="outlined" sx={{ mr: 2 }} onClick={() => handleProfileUpdate('email')}>Change Email</Button>
-        <Button variant="outlined" sx={{ mr: 2 }} onClick={() => handleProfileUpdate('password')}>Change Password</Button>
-        <Button variant="outlined" onClick={() => handleProfileUpdate('2fa')}>Setup 2FA</Button>
-        <Button variant="contained" color="error" sx={{ ml: 2 }} onClick={() => handleProfileUpdate('account_deletion')}>Delete Account</Button>
-      </Box>
-
-      {/* Session Management Section */}
-      <Box sx={{ bgcolor: 'background.paper', p: 4, borderRadius: 2, boxShadow: 1, mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 3, color: 'text.primary', display: 'flex', alignItems: 'center' }}>
-          <FaSync className="mr-2 text-oc-steel" /> Session Management
-        </Typography>
-        <Typography sx={{ color: 'text.secondary', mb: 2 }}>
-          Manage devices and active sessions where you are logged into OneClouds.
-        </Typography>
-
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" sx={{ mb: 2, color: 'text.primary' }}>Your Trusted Devices:</Typography>
-          {trustedDevices.length === 0 ? (
-            <Typography sx={{ color: 'text.secondary' }}>No trusted devices found.</Typography>
-          ) : (
-            <Box>
-              {trustedDevices.map(device => (
-                <Box key={device.id} sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', bgcolor: '#f8f8f8', p: 2, borderRadius: 1, mb: 1.5 }}>
-                  <Box>
-                    <Typography variant="body1" sx={{ fontWeight: 'medium' }}>{device.name || 'Unknown Device'}</Typography>
-                    <Typography variant="body2" sx={{ color: 'text.secondary' }}>Last Used: {new Date(device.last_used_at).toLocaleString()}</Typography>
-                    <Typography variant="caption" sx={{ color: 'text.disabled' }}>Fingerprint: {device.device_fingerprint.substring(0, 10)}...</Typography>
-                  </Box>
-                  <Button variant="outlined" color="error" size="small" onClick={() => openRevokeDeviceConfirm(device)}>
-                    Revoke Device
-                  </Button>
-                </Box>
-              ))}
-            </Box>
-          )}
-        </Box>
-        
-        <Button variant="contained" color="error" onClick={openRevokeAllSessionsConfirm} startIcon={<FaSignOutAlt />}>
-          Revoke All Sessions
+        <Button
+          variant="outlined"
+          sx={{ mr: 2 }}
+          onClick={() => handleProfileUpdate("password")}
+        >
+          Change Password
+        </Button>
+        <Button
+          variant="contained"
+          color="error"
+          sx={{ ml: 2 }}
+          onClick={() => handleProfileUpdate("account_deletion")}
+        >
+          Delete Account
         </Button>
       </Box>
 
-      {/* Account Management Section */}
-      <Box sx={{ bgcolor: 'background.paper', p: 4, borderRadius: 2, boxShadow: 1, mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 3, color: 'text.primary', display: 'flex', alignItems: 'center' }}>
-          <FaCloud className="mr-2 text-oc-steel" /> Account Management
-        </Typography>
-        {user?.storage_accounts?.length === 0 ? (
-          <Typography sx={{ color: 'text.secondary' }}>No connected accounts.</Typography>
-        ) : (
-          user?.storage_accounts?.map(account => (
-            <Box key={account.id} sx={{ mb: 3, pb: 3, borderBottom: '1px solid #e0e0e0' }}>
-              <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', mb: 1, color: 'text.primary' }}>
-                {account.provider.replace('_', ' ')} ({account.account_email})
-              </Typography>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-                <Typography variant="body1" sx={{ mr: 2, color: 'text.secondary' }}>Current Mode: 
-                  <span className={`font-semibold ${account.mode === 'metadata' ? 'text-gray-600' : 'text-oc-teal'}`}>
-                    {account.mode === 'metadata' ? 'Metadata Mode' : 'Full Access Mode'}
-                  </span>
-                </Typography>
-                <Button 
-                  variant="outlined" 
-                  size="small" 
-                  onClick={() => openModeSwitchConfirm(account, account.mode === 'metadata' ? 'full_access' : 'metadata')}
-                >
-                  Switch to {account.mode === 'metadata' ? 'Full Access Mode' : 'Metadata Mode'}
-                </Button>
-              </Box>
-              <Button 
-                variant="contained" 
-                color="error" 
-                size="small" 
-                startIcon={<FaTimes />} 
-                onClick={() => openAccountDisconnectConfirm(account)}
-              >
-                Disconnect Account
-              </Button>
-            </Box>
-          ))
-        )}
-      </Box>
-
       {/* Application Preferences Section */}
-      <Box sx={{ bgcolor: 'background.paper', p: 4, borderRadius: 2, boxShadow: 1, mb: 4 }}>
-        <Typography variant="h5" sx={{ mb: 3, color: 'text.primary', display: 'flex', alignItems: 'center' }}>
+      <Box
+        sx={{
+          bgcolor: "background.paper",
+          p: 4,
+          borderRadius: 2,
+          boxShadow: 1,
+          mb: 4,
+        }}
+      >
+        <Typography
+          variant="h5"
+          sx={{
+            mb: 3,
+            color: "text.primary",
+            display: "flex",
+            alignItems: "center",
+          }}
+        >
           <FaCog className="mr-2 text-oc-steel" /> Application Preferences
         </Typography>
 
         <Box sx={{ mb: 3 }}>
           <FormControlLabel
-            control={<Switch checked={autoSyncEnabled} onChange={handleAutoSyncToggle} color="primary" />}
+            control={
+              <Switch
+                checked={autoSyncEnabled}
+                onChange={handleAutoSyncToggle}
+                color="primary"
+              />
+            }
             label={
-              <Typography variant="subtitle1" sx={{ color: 'text.primary' }}>
+              <Typography variant="subtitle1" sx={{ color: "text.primary" }}>
                 Enable Auto-Sync
               </Typography>
             }
           />
-          <Typography variant="body2" sx={{ color: 'text.secondary', ml: 4 }}>
+          <Typography variant="body2" sx={{ color: "text.secondary", ml: 4 }}>
             Automatically synchronize files from your connected cloud accounts.
           </Typography>
         </Box>
@@ -525,7 +620,11 @@ const Settings = () => {
           <Box sx={{ mb: 3, ml: 4 }}>
             <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
               <InputLabel>Sync Interval</InputLabel>
-              <Select value={syncInterval} onChange={handleSyncIntervalChange} label="Sync Interval">
+              <Select
+                value={syncInterval}
+                onChange={handleSyncIntervalChange}
+                label="Sync Interval"
+              >
                 <MenuItem value={15}>Every 15 minutes</MenuItem>
                 <MenuItem value={30}>Every 30 minutes</MenuItem>
                 <MenuItem value={60}>Every hour</MenuItem>
@@ -534,16 +633,24 @@ const Settings = () => {
                 <MenuItem value={1440}>Every 24 hours</MenuItem>
               </Select>
             </FormControl>
-            <Typography variant="body2" sx={{ color: 'text.secondary', mt: 1 }}>
+            <Typography variant="body2" sx={{ color: "text.secondary", mt: 1 }}>
               How often OneClouds should check for new or updated files.
             </Typography>
           </Box>
         )}
 
         <Box sx={{ mb: 3 }}>
-          <FormControl variant="outlined" size="small" sx={{ minWidth: 200, mr: 3 }}>
+          <FormControl
+            variant="outlined"
+            size="small"
+            sx={{ minWidth: 200, mr: 3 }}
+          >
             <InputLabel>Default Upload Location</InputLabel>
-            <Select value={defaultUploadLocation} onChange={handleDefaultUploadLocationChange} label="Default Upload Location">
+            <Select
+              value={defaultUploadLocation}
+              onChange={handleDefaultUploadLocationChange}
+              label="Default Upload Location"
+            >
               {/* Dynamically load connected accounts here, filtered by full_access mode */}
               {/* For now, placeholder options */}
               <MenuItem value="__root__">My Drive (Root)</MenuItem>
@@ -558,40 +665,45 @@ const Settings = () => {
               <MenuItem value="dark">Dark</MenuItem>
             </Select>
           </FormControl>
-          <FormControl variant="outlined" size="small" sx={{ minWidth: 200 }}>
-            <InputLabel>Language</InputLabel>
-            <Select value={language} onChange={handleLanguageChange} label="Language">
-              <MenuItem value="en">English</MenuItem>
-              <MenuItem value="es">Spanish</MenuItem>
-              <MenuItem value="fr">French</MenuItem>
-            </Select>
-          </FormControl>
         </Box>
 
         <Box>
           <FormControlLabel
-            control={<Switch checked={notificationsEnabled} onChange={handleNotificationsToggle} color="primary" />}
+            control={
+              <Switch
+                checked={notificationsEnabled}
+                onChange={handleNotificationsToggle}
+                color="primary"
+              />
+            }
             label={
-              <Typography variant="subtitle1" sx={{ color: 'text.primary' }}>
+              <Typography variant="subtitle1" sx={{ color: "text.primary" }}>
                 Enable Notifications
               </Typography>
             }
           />
-          <Typography variant="body2" sx={{ color: 'text.secondary', ml: 4 }}>
-            Receive alerts for sync status, new files, and other important events.
+          <Typography variant="body2" sx={{ color: "text.secondary", ml: 4 }}>
+            Receive alerts for sync status, new files, and other important
+            events.
           </Typography>
         </Box>
-
       </Box>
 
       {/* Account Disconnect Confirmation Dialog */}
-      <Dialog open={showAccountDisconnectConfirm} onClose={handleCancelDisconnect}>
+      <Dialog
+        open={showAccountDisconnectConfirm}
+        onClose={handleCancelDisconnect}
+      >
         <DialogTitle>Confirm Disconnect Account</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Are you sure you want to disconnect 
-            <span className="font-semibold">{accountToDisconnect?.account_email} ({accountToDisconnect?.provider.replace('_', ' ')})</span>?
-            Your files will remain in the cloud, but they won't be accessible through OneClouds.
+            Are you sure you want to disconnect
+            <span className="font-semibold">
+              {accountToDisconnect?.account_email} (
+              {accountToDisconnect?.provider.replace("_", " ")})
+            </span>
+            ? Your files will remain in the cloud, but they won't be accessible
+            through OneClouds.
           </Typography>
           <FormControlLabel
             control={
@@ -607,7 +719,12 @@ const Settings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelDisconnect}>Cancel</Button>
-          <Button onClick={handleDisconnectAccount} color="error" variant="contained" disabled={!confirmDisconnectCheckbox}>
+          <Button
+            onClick={handleDisconnectAccount}
+            color="error"
+            variant="contained"
+            disabled={!confirmDisconnectCheckbox}
+          >
             Disconnect
           </Button>
         </DialogActions>
@@ -618,35 +735,62 @@ const Settings = () => {
         <DialogTitle>Confirm Mode Switch</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Are you sure you want to switch 
-            <span className="font-semibold">{accountToSwitchMode?.account_email} ({accountToSwitchMode?.provider.replace('_', ' ')})</span>
-            to <span className="font-semibold">{newMode === 'metadata' ? 'Metadata Mode' : 'Full Access Mode'}</span>?
+            Are you sure you want to switch
+            <span className="font-semibold">
+              {accountToSwitchMode?.account_email} (
+              {accountToSwitchMode?.provider.replace("_", " ")})
+            </span>
+            to{" "}
+            <span className="font-semibold">
+              {newMode === "metadata" ? "Metadata Mode" : "Full Access Mode"}
+            </span>
+            ?
           </Typography>
           <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            Warning: Changing modes requires re-authentication and may temporarily disconnect your account.
-            Existing metadata will be preserved, but you'll need to re-authenticate through the provider after confirming.
+            Warning: Changing modes requires re-authentication and may
+            temporarily disconnect your account. Existing metadata will be
+            preserved, but you'll need to re-authenticate through the provider
+            after confirming.
           </Typography>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            Current Mode: <span className="font-semibold">{accountToSwitchMode?.mode === 'metadata' ? 'Metadata Mode' : 'Full Access Mode'}</span>
+            Current Mode:{" "}
+            <span className="font-semibold">
+              {accountToSwitchMode?.mode === "metadata"
+                ? "Metadata Mode"
+                : "Full Access Mode"}
+            </span>
           </Typography>
           <Typography variant="body2" sx={{ mb: 2 }}>
-            New Mode: <span className="font-semibold">{newMode === 'metadata' ? 'Metadata Mode (View Only)' : 'Full Access Mode (Full Control)'}</span>
+            New Mode:{" "}
+            <span className="font-semibold">
+              {newMode === "metadata"
+                ? "Metadata Mode (View Only)"
+                : "Full Access Mode (Full Control)"}
+            </span>
           </Typography>
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelModeSwitch}>Cancel</Button>
-          <Button onClick={handleSwitchMode} color="primary" variant="contained">
+          <Button
+            onClick={handleSwitchMode}
+            color="primary"
+            variant="contained"
+          >
             Continue & Re-authenticate
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Email Change Dialog */}
-      <Dialog open={showEmailChangeDialog} onClose={() => setShowEmailChangeDialog(false)}>
+      <Dialog
+        open={showEmailChangeDialog}
+        onClose={() => setShowEmailChangeDialog(false)}
+      >
         <DialogTitle>Change Email</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Enter your new email address and current password to change your email.
+            Enter your new email address and current password to change your
+            email.
           </Typography>
           <TextField
             autoFocus
@@ -672,15 +816,24 @@ const Settings = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowEmailChangeDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmitEmailChange} color="primary" variant="contained">
+          <Button onClick={() => setShowEmailChangeDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitEmailChange}
+            color="primary"
+            variant="contained"
+          >
             Change Email
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Password Change Dialog */}
-      <Dialog open={showPasswordChangeDialog} onClose={() => setShowPasswordChangeDialog(false)}>
+      <Dialog
+        open={showPasswordChangeDialog}
+        onClose={() => setShowPasswordChangeDialog(false)}
+      >
         <DialogTitle>Change Password</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
@@ -721,21 +874,33 @@ const Settings = () => {
           />
         </DialogContent>
         <DialogActions>
-          <Button onClick={() => setShowPasswordChangeDialog(false)}>Cancel</Button>
-          <Button onClick={handleSubmitPasswordChange} color="primary" variant="contained">
+          <Button onClick={() => setShowPasswordChangeDialog(false)}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmitPasswordChange}
+            color="primary"
+            variant="contained"
+          >
             Change Password
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* 2FA Setup Dialog */}
-      <Dialog open={show2FASetupDialog} onClose={() => setShow2FASetupDialog(false)}>
-        <DialogTitle>{is2FAVerified ? "Verify 2FA" : "Setup Two-Factor Authentication"}</DialogTitle>
+      <Dialog
+        open={show2FASetupDialog}
+        onClose={() => setShow2FASetupDialog(false)}
+      >
+        <DialogTitle>
+          {is2FAVerified ? "Verify 2FA" : "Setup Two-Factor Authentication"}
+        </DialogTitle>
         <DialogContent>
           {!is2FAVerified ? (
             <Box>
               <Typography sx={{ mb: 2 }}>
-                Enter your current password to initiate Two-Factor Authentication setup.
+                Enter your current password to initiate Two-Factor
+                Authentication setup.
               </Typography>
               <TextField
                 autoFocus
@@ -750,15 +915,27 @@ const Settings = () => {
               />
             </Box>
           ) : (
-            <Box sx={{ textAlign: 'center' }}>
+            <Box sx={{ textAlign: "center" }}>
               <Typography sx={{ mb: 2 }}>
-                Scan the QR code with your authenticator app (e.g., Google Authenticator) and enter the 6-digit code below.
+                Scan the QR code with your authenticator app (e.g., Google
+                Authenticator) and enter the 6-digit code below.
               </Typography>
               {twoFAQrCodeUrl && (
-                <img src={twoFAQrCodeUrl} alt="QR Code" style={{ width: 200, height: 200, margin: '0 auto 16px' }} />
+                <img
+                  src={twoFAQrCodeUrl}
+                  alt="QR Code"
+                  style={{ width: 200, height: 200, margin: "0 auto 16px" }}
+                />
               )}
-              <Typography variant="body2" sx={{ mb: 2, color: 'text.secondary' }}>
-                Your secret key: <span className="font-mono font-semibold text-oc-teal">{twoFASecret}</span> (manual entry)
+              <Typography
+                variant="body2"
+                sx={{ mb: 2, color: "text.secondary" }}
+              >
+                Your secret key:{" "}
+                <span className="font-mono font-semibold text-oc-teal">
+                  {twoFASecret}
+                </span>{" "}
+                (manual entry)
               </Typography>
               <TextField
                 margin="dense"
@@ -769,7 +946,7 @@ const Settings = () => {
                 variant="outlined"
                 value={twoFAOtpInput}
                 onChange={(e) => setTwoFAOtpInput(e.target.value)}
-                inputProps={{ maxLength: 6, pattern: '[0-9]{6}' }}
+                inputProps={{ maxLength: 6, pattern: "[0-9]{6}" }}
               />
             </Box>
           )}
@@ -777,11 +954,21 @@ const Settings = () => {
         <DialogActions>
           <Button onClick={() => setShow2FASetupDialog(false)}>Cancel</Button>
           {!is2FAVerified ? (
-            <Button onClick={handleInitiate2FASetup} color="primary" variant="contained" disabled={!setup2FAPassword}>
+            <Button
+              onClick={handleInitiate2FASetup}
+              color="primary"
+              variant="contained"
+              disabled={!setup2FAPassword}
+            >
               Initiate Setup
             </Button>
           ) : (
-            <Button onClick={handleVerify2FA} color="primary" variant="contained" disabled={twoFAOtpInput.length !== 6}>
+            <Button
+              onClick={handleVerify2FA}
+              color="primary"
+              variant="contained"
+              disabled={twoFAOtpInput.length !== 6}
+            >
               Verify & Enable 2FA
             </Button>
           )}
@@ -793,8 +980,11 @@ const Settings = () => {
         <DialogTitle>Confirm Device Revocation</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Are you sure you want to revoke access for the device 
-            <span className="font-semibold">{deviceToRevoke?.name || 'Unknown Device'}</span>?
+            Are you sure you want to revoke access for the device
+            <span className="font-semibold">
+              {deviceToRevoke?.name || "Unknown Device"}
+            </span>
+            ?
           </Typography>
           <Typography variant="body2" color="error">
             This device will be logged out and will need to re-authenticate.
@@ -802,22 +992,31 @@ const Settings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelRevokeDevice}>Cancel</Button>
-          <Button onClick={handleRevokeDevice} color="error" variant="contained">
+          <Button
+            onClick={handleRevokeDevice}
+            color="error"
+            variant="contained"
+          >
             Revoke Device
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Revoke All Sessions Confirmation Dialog */}
-      <Dialog open={showRevokeAllSessionsConfirm} onClose={handleCancelRevokeAllSessions}>
+      <Dialog
+        open={showRevokeAllSessionsConfirm}
+        onClose={handleCancelRevokeAllSessions}
+      >
         <DialogTitle>Confirm Revoke All Sessions</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Are you sure you want to revoke all active sessions and trusted devices?
-            You will be logged out from all devices, including this one.
+            Are you sure you want to revoke all active sessions and trusted
+            devices? You will be logged out from all devices, including this
+            one.
           </Typography>
           <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            This action cannot be undone and requires your current password for confirmation.
+            This action cannot be undone and requires your current password for
+            confirmation.
           </Typography>
           <TextField
             autoFocus
@@ -833,21 +1032,32 @@ const Settings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelRevokeAllSessions}>Cancel</Button>
-          <Button onClick={handleRevokeAllSessions} color="error" variant="contained" disabled={!currentPasswordForRevokeAll}>
+          <Button
+            onClick={handleRevokeAllSessions}
+            color="error"
+            variant="contained"
+            disabled={!currentPasswordForRevokeAll}
+          >
             Revoke All
           </Button>
         </DialogActions>
       </Dialog>
 
       {/* Account Deletion Confirmation Dialog */}
-      <Dialog open={showAccountDeletionConfirm} onClose={handleCancelAccountDeletion}>
+      <Dialog
+        open={showAccountDeletionConfirm}
+        onClose={handleCancelAccountDeletion}
+      >
         <DialogTitle>Confirm Account Deletion</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            You are about to permanently delete your OneClouds account. This action is irreversible and will remove all your data, including connected cloud accounts and file metadata.
+            You are about to permanently delete your OneClouds account. This
+            action is irreversible and will remove all your data, including
+            connected cloud accounts and file metadata.
           </Typography>
           <Typography variant="body2" color="error" sx={{ mb: 2 }}>
-            To confirm this action, please enter your current password and check the confirmation box.
+            To confirm this action, please enter your current password and check
+            the confirmation box.
           </Typography>
           <TextField
             autoFocus
@@ -865,7 +1075,9 @@ const Settings = () => {
             control={
               <Checkbox
                 checked={confirmAccountDeletionCheckbox}
-                onChange={(e) => setConfirmAccountDeletionCheckbox(e.target.checked)}
+                onChange={(e) =>
+                  setConfirmAccountDeletionCheckbox(e.target.checked)
+                }
                 name="confirmAccountDeletion"
                 color="primary"
               />
@@ -875,7 +1087,14 @@ const Settings = () => {
         </DialogContent>
         <DialogActions>
           <Button onClick={handleCancelAccountDeletion}>Cancel</Button>
-          <Button onClick={handleDeleteAccount} color="error" variant="contained" disabled={!passwordForAccountDeletion || !confirmAccountDeletionCheckbox}>
+          <Button
+            onClick={handleDeleteAccount}
+            color="error"
+            variant="contained"
+            disabled={
+              !passwordForAccountDeletion || !confirmAccountDeletionCheckbox
+            }
+          >
             Delete Account
           </Button>
         </DialogActions>

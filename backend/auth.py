@@ -49,11 +49,14 @@ class AuthHandler:
             logger.error(f"Error verifying password: {e}")
             return False
 
-    def create_token(self, data: dict, token_type: str) -> str:
-        """Create a JWT token (access or refresh)."""
+    def create_token(self, data: dict, token_type: str, expires_minutes: Optional[int] = None) -> str:
+        """Create a JWT token (access or refresh) with optional custom expiry."""
         to_encode = data.copy()
 
-        if token_type == "access":
+        if expires_minutes:
+            # Use custom expiry time if provided
+            expire = datetime.utcnow() + timedelta(minutes=expires_minutes)
+        elif token_type == "access":
             expire = datetime.utcnow() + timedelta(minutes=self.access_token_expire_minutes)
         elif token_type == "refresh":
             expire = datetime.utcnow() + timedelta(days=self.refresh_token_expire_days)

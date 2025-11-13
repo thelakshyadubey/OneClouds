@@ -12,11 +12,12 @@ import Files from "./pages/Files";
 import AuthCallback from "./pages/AuthCallback"; // New import
 import Duplicates from "./pages/Duplicates";
 import Settings from "./pages/Settings";
-import ModeSelection from "./pages/ModeSelection"; // Import the new ModeSelection component
 import Accounts from "./pages/Accounts"; // Import the new Accounts component
 import LargeFiles from "./pages/LargeFiles"; // Import the new LargeFiles component
 import Login from "./pages/Login"; // Import Login component
 import Register from "./pages/Register"; // Import Register component
+import ForgotPassword from "./pages/ForgotPassword"; // Import ForgotPassword component
+import ResetPassword from "./pages/ResetPassword"; // Import ResetPassword component
 import Layout from "./components/Layout";
 import "./App.css";
 
@@ -29,17 +30,11 @@ function App() {
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/forgot-password" element={<ForgotPassword />} />
+          <Route path="/reset-password" element={<ResetPassword />} />
           <Route path="/auth/success" element={<AuthCallback />} />{" "}
           {/* Corrected path */}
           {/* All Routes - No Authentication Required */}
-          <Route
-            path="/mode-selection"
-            element={
-              <Layout>
-                <ModeSelection />
-              </Layout>
-            }
-          />
           <Route
             path="/dashboard"
             element={

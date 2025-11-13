@@ -1,6 +1,14 @@
 import React, { useState, useEffect, useCallback } from "react";
-import { useNavigate } from "react-router-dom";
-import { FaSync, FaTrash, FaExchangeAlt, FaCloud } from "react-icons/fa";
+import { useNavigate, useLocation } from "react-router-dom";
+import {
+  FaSync,
+  FaTrash,
+  FaExchangeAlt,
+  FaCloud,
+  FaDropbox,
+  FaGoogle,
+} from "react-icons/fa";
+import { SiMicrosoftonedrive, SiGoogledrive } from "react-icons/si";
 import toast from "react-hot-toast";
 import api from "../services/api";
 import config from "../config"; // Import the default export config
@@ -23,8 +31,14 @@ import {
 
 // Utility to get provider icon (can be moved to a shared utility or config)
 const getProviderIcon = (providerId) => {
-  const provider = config.CLOUD_PROVIDERS.find((p) => p.id === providerId);
-  return provider ? provider.icon : <FaCloud />;
+  const iconMap = {
+    google_drive: <SiGoogledrive className="text-blue-500" />,
+    dropbox: <FaDropbox className="text-blue-600" />,
+    onedrive: <SiMicrosoftonedrive className="text-blue-500" />,
+    google_photos: <FaGoogle className="text-red-500" />,
+    terabox: <FaCloud className="text-orange-500" />,
+  };
+  return iconMap[providerId] || <FaCloud />;
 };
 
 // Utility to get provider name (can be moved to a shared utility or config)
@@ -71,6 +85,7 @@ const formatStorageSize = (bytes) => {
 
 const Accounts = () => {
   const navigate = useNavigate();
+  const location = useLocation();
   const [storageAccounts, setStorageAccounts] = useState([]);
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState({});
@@ -98,6 +113,31 @@ const Accounts = () => {
   useEffect(() => {
     fetchStorageAccounts();
   }, [fetchStorageAccounts]);
+
+  // Handle navigation from Duplicates page with highlightAccount and targetMode
+  useEffect(() => {
+    if (
+      location.state?.highlightAccount &&
+      location.state?.targetMode &&
+      storageAccounts.length > 0
+    ) {
+      const accountId = location.state.highlightAccount;
+      const targetMode = location.state.targetMode;
+
+      // Find the account by ID
+      const account = storageAccounts.find((acc) => acc.id === accountId);
+
+      if (account) {
+        // Auto-open the mode switch dialog
+        setAccountToSwitchMode(account);
+        setNewMode(targetMode);
+        setShowModeSwitchConfirm(true);
+
+        // Clear the navigation state
+        navigate(location.pathname, { replace: true, state: {} });
+      }
+    }
+  }, [location.state, storageAccounts, navigate, location.pathname]);
 
   const handleSyncAccount = async (accountId) => {
     setSyncing((prev) => ({ ...prev, [accountId]: true }));
@@ -154,25 +194,29 @@ const Accounts = () => {
     if (!accountToSwitchMode || !newMode) return;
 
     try {
-      // In a real scenario, this would initiate an OAuth flow for re-authentication
-      // For now, we simulate success and update locally
-      toast.info(
+      // Call the API to get the OAuth URL with authentication
+      const response = await api.get(
+        `/api/auth/${accountToSwitchMode.provider}`,
+        {
+          params: { mode: newMode },
+        }
+      );
+
+      // Show toast notification
+      toast(
         `Switching ${getProviderName(accountToSwitchMode.provider)} to ${
           newMode === "metadata" ? "Metadata Mode" : "Full Access Mode"
-        }. Please re-authenticate through the provider.`
+        }. Please re-authenticate through the provider.`,
+        { duration: 4000 }
       );
-      // await api.put(`/api/storage-accounts/${accountToSwitchMode.id}/mode`, { mode: newMode });
-      // For now, simulate by navigating to settings page or auth callback (if re-auth needed)
-      navigate("/settings", {
-        state: {
-          highlightAccount: accountToSwitchMode.id,
-          targetMode: newMode,
-        },
-      });
+
+      // Redirect to the OAuth URL from backend response
+      window.location.href = response.data.oauth_url;
+
+      // Close the dialog
       setShowModeSwitchConfirm(false);
       setAccountToSwitchMode(null);
       setNewMode(null);
-      // After successful re-authentication, fetchStorageAccounts would be called to update UI
     } catch (error) {
       console.error("Failed to switch mode:", error);
       toast.error(error.response?.data?.detail || "Failed to switch mode.");
@@ -260,12 +304,14 @@ const Accounts = () => {
                     <div className="flex items-center mt-1">
                       <span
                         className={`px-2 py-1 rounded-full text-xs font-medium ${
-                          account.mode === "metadata"
+                          account.mode === "metadata" ||
+                          account.mode === "metadata-only"
                             ? "bg-gray-200 text-gray-700"
                             : "bg-oc-teal/20 text-oc-navy"
                         }`}
                       >
-                        {account.mode === "metadata"
+                        {account.mode === "metadata" ||
+                        account.mode === "metadata-only"
                           ? "Metadata Mode"
                           : "Full Access Mode"}
                       </span>
@@ -299,13 +345,19 @@ const Accounts = () => {
                     onClick={() =>
                       openModeSwitchConfirm(
                         account,
-                        account.mode === "metadata" ? "full_access" : "metadata"
+                        account.mode === "metadata" ||
+                          account.mode === "metadata-only"
+                          ? "full_access"
+                          : "metadata"
                       )
                     }
                     startIcon={<FaExchangeAlt />}
                   >
                     Switch to{" "}
-                    {account.mode === "metadata" ? "Full Access" : "Metadata"}
+                    {account.mode === "metadata" ||
+                    account.mode === "metadata-only"
+                      ? "Full Access"
+                      : "Metadata"}
                   </Button>
                   <Button
                     variant="outlined"
@@ -372,9 +424,8 @@ const Accounts = () => {
             }
           />
           <Typography variant="body1" sx={{ color: "text.secondary", mb: 3 }}>
-            Overall Usage:{" "}
-            {Math.round((totalStorageUsed / 1024 ** 3) * 100) / 100} GB of
-            {Math.round((totalStorageLimit / 1024 ** 3) * 100) / 100} GB (
+            Overall Usage: {(totalStorageUsed / 1024 ** 3).toFixed(2)} GB of{" "}
+            {(totalStorageLimit / 1024 ** 3).toFixed(2)} GB (
             {overallUsagePercentage.toFixed(2)}% used)
           </Typography>
 
@@ -382,53 +433,54 @@ const Accounts = () => {
             Breakdown by Provider:
           </Typography>
           <List>
-            {storageAccounts.map((account) => (
-              <ListItem key={account.id} disablePadding sx={{ mb: 1 }}>
-                <Box
-                  sx={{ display: "flex", alignItems: "center", width: "100%" }}
-                >
-                  <div className="text-xl mr-2">
-                    {getProviderIcon(account.provider)}
-                  </div>
-                  <ListItemText
-                    primary={`${getProviderName(account.provider)} (${
-                      account.mode === "metadata" ? "Metadata" : "Full Access"
-                    })`}
-                    secondary={
-                      <Typography
-                        component="span"
-                        variant="body2"
-                        color="text.secondary"
-                      >
+            {storageAccounts.map((account) => {
+              const usagePercent =
+                account.storage_limit > 0
+                  ? (account.storage_used / account.storage_limit) * 100
+                  : 0;
+
+              return (
+                <ListItem key={account.id} disablePadding sx={{ mb: 1.5 }}>
+                  <Box
+                    sx={{
+                      display: "flex",
+                      alignItems: "center",
+                      width: "100%",
+                    }}
+                  >
+                    <div className="text-2xl mr-3">
+                      {getProviderIcon(account.provider)}
+                    </div>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                        {getProviderName(account.provider)} (
+                        {account.mode === "metadata"
+                          ? "Metadata"
+                          : "Full Access"}
+                        )
+                      </Typography>
+                      <Typography variant="body2" color="text.secondary">
                         {formatStorageSize(account.storage_used)} /{" "}
                         {formatStorageSize(account.storage_limit)}
+                        <span
+                          style={{
+                            marginLeft: "8px",
+                            color:
+                              usagePercent > 90
+                                ? "#EF4444"
+                                : usagePercent > 70
+                                ? "#F59E0B"
+                                : "#10B981",
+                          }}
+                        >
+                          ({usagePercent.toFixed(2)}%)
+                        </span>
                       </Typography>
-                    }
-                  />
-                  <LinearProgress
-                    variant="determinate"
-                    value={
-                      account.storage_limit > 0
-                        ? (account.storage_used / account.storage_limit) * 100
-                        : 0
-                    }
-                    sx={{ width: "100px", height: 6, borderRadius: 3, ml: 2 }}
-                    color={
-                      (account.storage_limit > 0
-                        ? (account.storage_used / account.storage_limit) * 100
-                        : 0) > 90
-                        ? "error"
-                        : (account.storage_limit > 0
-                            ? (account.storage_used / account.storage_limit) *
-                              100
-                            : 0) > 70
-                        ? "warning"
-                        : "primary"
-                    }
-                  />
-                </Box>
-              </ListItem>
-            ))}
+                    </Box>
+                  </Box>
+                </ListItem>
+              );
+            })}
           </List>
         </Box>
       )}
@@ -476,11 +528,11 @@ const Accounts = () => {
         <DialogTitle>Confirm Mode Switch</DialogTitle>
         <DialogContent>
           <Typography sx={{ mb: 2 }}>
-            Are you sure you want to switch
+            Are you sure you want to switch{" "}
             <span className="font-semibold">
               {accountToSwitchMode?.account_email} (
               {getProviderName(accountToSwitchMode?.provider)})
-            </span>
+            </span>{" "}
             to{" "}
             <span className="font-semibold">
               {newMode === "metadata" ? "Metadata Mode" : "Full Access Mode"}
@@ -496,7 +548,8 @@ const Accounts = () => {
           <Typography variant="body2" sx={{ mb: 2 }}>
             Current Mode:{" "}
             <span className="font-semibold">
-              {accountToSwitchMode?.mode === "metadata"
+              {accountToSwitchMode?.mode === "metadata" ||
+              accountToSwitchMode?.mode === "metadata-only"
                 ? "Metadata Mode"
                 : "Full Access Mode"}
             </span>

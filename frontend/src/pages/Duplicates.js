@@ -163,15 +163,35 @@ const Duplicates = () => {
     setFileToRestrict(null);
   };
 
-  const handleSwitchToFullManagement = () => {
+  const handleSwitchToFullManagement = async () => {
     if (fileToRestrict) {
-      navigate("/settings", {
-        state: {
-          highlightAccount: fileToRestrict.storage_account.id,
-          targetMode: "full_access",
-        },
-      });
-      handleCloseDeleteRestrictionModal();
+      try {
+        // Call the API to get the OAuth URL with authentication
+        const response = await api.get(
+          `/api/auth/${fileToRestrict.storage_account.provider}`,
+          {
+            params: { mode: "full_access" },
+          }
+        );
+
+        // Show toast notification
+        toast(
+          `Switching to Full Access Mode for ${fileToRestrict.storage_account.provider.replace(
+            "_",
+            " "
+          )}. You will be redirected to re-authenticate.`,
+          { duration: 4000 }
+        );
+
+        // Close the modal
+        handleCloseDeleteRestrictionModal();
+
+        // Redirect to the OAuth URL from backend response
+        window.location.href = response.data.oauth_url;
+      } catch (error) {
+        console.error("Failed to switch mode:", error);
+        toast.error(error.response?.data?.detail || "Failed to switch mode.");
+      }
     }
   };
 

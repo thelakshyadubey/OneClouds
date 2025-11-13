@@ -13,7 +13,7 @@ class User(Base):
     email = Column(String(120), unique=True, nullable=False, index=True)
     name = Column(String(100))
     hashed_password = Column(String(128), nullable=False) # New column for hashed password
-    mode = Column(String(20), default="metadata", nullable=False) # 'metadata' or 'full_access'
+    mode = Column(String(20), default="full_access", nullable=False) # 'metadata' or 'full_access'
     is_2fa_enabled = Column(Boolean, default=False)
     otp_secret = Column(String(32), nullable=True) # For TOTP/HOTP secrets
     otp_verified_at = Column(DateTime, nullable=True)

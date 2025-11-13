@@ -15,17 +15,29 @@ class Settings(BaseSettings):
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 43200  # 30 days
     REFRESH_TOKEN_EXPIRE_DAYS: int = 90 # New: For "Stay logged in" feature
     
-    # Email/OTP settings for 2FA
-    MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", "apikey") # SendGrid uses "apikey" as the username
-    MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", "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") # <<< IMPORTANT: REPLACE WITH YOUR ACTUAL SENDGRID API KEY (starts with SG.)
-    MAIL_FROM: str = os.getenv("MAIL_FROM", "lakshya.dubeyji@gmail.com") # <<< IMPORTANT: Use the email you verified in SendGrid
-    MAIL_PORT: int = int(os.getenv("MAIL_PORT", "465")) # Changed to 465 for implicit SSL/TLS
-    MAIL_SERVER: str = os.getenv("MAIL_SERVER", "smtp.sendgrid.net") # SendGrid SMTP server
-    MAIL_STARTTLS: bool = os.getenv("MAIL_STARTTLS", "false").lower() == "true" # Set to false for implicit SSL/TLS
-    MAIL_SSL_TLS: bool = os.getenv("MAIL_SSL_TLS", "true").lower() == "true" # Set to true for implicit SSL/TLS
+    # Email/OTP settings for 2FA and password reset
+    SMTP_HOST: str = os.getenv("SMTP_HOST", "smtp.gmail.com")
+    SMTP_PORT: int = int(os.getenv("SMTP_PORT", "587"))
+    SMTP_USER: str = os.getenv("SMTP_USER", "lakshya.dubeyji@gmail.com")
+    SMTP_PASSWORD: str = os.getenv("SMTP_PASSWORD", "")  # Gmail app password
+    FROM_EMAIL: str = os.getenv("FROM_EMAIL", "lakshya.dubeyji@gmail.com")
+    
+    # Legacy email settings (kept for backward compatibility)
+    MAIL_USERNAME: str = os.getenv("MAIL_USERNAME", os.getenv("SMTP_USER", "lakshya.dubeyji@gmail.com"))
+    MAIL_PASSWORD: str = os.getenv("MAIL_PASSWORD", os.getenv("SMTP_PASSWORD", ""))
+    MAIL_FROM: str = os.getenv("MAIL_FROM", os.getenv("FROM_EMAIL", "lakshya.dubeyji@gmail.com"))
+    MAIL_PORT: int = int(os.getenv("MAIL_PORT", os.getenv("SMTP_PORT", "587")))
+    MAIL_SERVER: str = os.getenv("MAIL_SERVER", os.getenv("SMTP_HOST", "smtp.gmail.com"))
+    MAIL_STARTTLS: bool = os.getenv("MAIL_STARTTLS", "true").lower() == "true"  # TLS for Gmail
+    MAIL_SSL_TLS: bool = os.getenv("MAIL_SSL_TLS", "false").lower() == "true"  # Use STARTTLS instead
+    
     OTP_LENGTH: int = int(os.getenv("OTP_LENGTH", "6"))
     OTP_TTL_MINUTES: int = int(os.getenv("OTP_TTL_MINUTES", "10"))
-    OTP_RATE_LIMIT_SECONDS: int = int(os.getenv("OTP_RATE_LIMIT_SECONDS", "60")) # Time before user can request another OTP
+    OTP_RATE_LIMIT_SECONDS: int = int(os.getenv("OTP_RATE_LIMIT_SECONDS", "60"))
+    
+    # Password reset token expiry
+    PASSWORD_RESET_TOKEN_EXPIRE_MINUTES: int = 60  # 1 hour
+    EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES: int = 1440  # 24 hours
     
     # 2FA Lockout settings
     FAILED_LOGIN_ATTEMPTS_LIMIT: int = int(os.getenv("FAILED_LOGIN_ATTEMPTS_LIMIT", "5"))

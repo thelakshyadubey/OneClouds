@@ -8,6 +8,18 @@ import {
   FaFile,
   FaCopy,
 } from "react-icons/fa";
+import {
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  Typography,
+  Box,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
+} from "@mui/material";
 import toast from "react-hot-toast";
 import api, { authService } from "../services/api";
 
@@ -50,6 +62,9 @@ const Dashboard = () => {
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState({});
   const [stats, setStats] = useState({ total_files: 0, duplicate_groups: 0 }); // New state for overall stats
+  const [showModeDialog, setShowModeDialog] = useState(false);
+  const [selectedProvider, setSelectedProvider] = useState(null);
+  const [selectedMode, setSelectedMode] = useState("full_access");
 
   const fetchStorageAccounts = useCallback(async () => {
     try {
@@ -101,7 +116,27 @@ const Dashboard = () => {
   };
 
   const handleConnect = async (provider) => {
-    navigate(`/mode-selection?provider=${provider}`);
+    setSelectedProvider(provider);
+    setSelectedMode("full_access"); // Default to full_access
+    setShowModeDialog(true);
+  };
+
+  const handleModeSelection = async () => {
+    if (!selectedProvider || !selectedMode) return;
+
+    try {
+      const response = await api.get(`/api/auth/${selectedProvider}`, {
+        params: { mode: selectedMode },
+      });
+
+      // Redirect to OAuth URL
+      window.location.href = response.data.oauth_url;
+    } catch (error) {
+      console.error("Failed to initiate auth:", error);
+      toast.error(error.response?.data?.detail || "Failed to connect account");
+    } finally {
+      setShowModeDialog(false);
+    }
   };
 
   const handleSync = async (accountId) => {
@@ -481,6 +516,69 @@ const Dashboard = () => {
           </div>
         </div>
       </div>
+
+      {/* Mode Selection Dialog */}
+      <Dialog
+        open={showModeDialog}
+        onClose={() => setShowModeDialog(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>Select Access Mode</DialogTitle>
+        <DialogContent>
+          <Typography variant="body1" sx={{ mb: 3 }}>
+            Choose how you want to connect your{" "}
+            {selectedProvider && getProviderName(selectedProvider)} account:
+          </Typography>
+          <RadioGroup
+            value={selectedMode}
+            onChange={(e) => setSelectedMode(e.target.value)}
+          >
+            <FormControlLabel
+              value="full_access"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Full Access Mode
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Complete control over your files - view, download, upload,
+                    and delete files
+                  </Typography>
+                </Box>
+              }
+              sx={{ mb: 2, alignItems: "flex-start" }}
+            />
+            <FormControlLabel
+              value="metadata"
+              control={<Radio />}
+              label={
+                <Box>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    Metadata Mode (View Only)
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Read-only access - view file information without download or
+                    modification permissions
+                  </Typography>
+                </Box>
+              }
+              sx={{ alignItems: "flex-start" }}
+            />
+          </RadioGroup>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setShowModeDialog(false)}>Cancel</Button>
+          <Button
+            onClick={handleModeSelection}
+            variant="contained"
+            color="primary"
+          >
+            Continue
+          </Button>
+        </DialogActions>
+      </Dialog>
     </div>
   );
 };

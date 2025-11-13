@@ -25,7 +25,7 @@ const Login = () => {
 
       tokenManager.setTokens(response.access_token, response.refresh_token);
       toast.success("Login successful!");
-      navigate("/mode-selection");
+      navigate("/dashboard");
     } catch (error) {
       console.error("Login failed:", error);
       const errorMessage = error.response?.data?.detail
@@ -73,6 +73,17 @@ const Login = () => {
               variant="outlined"
               size="small"
             />
+          </div>
+
+          <div className="flex items-center justify-end">
+            <div className="text-sm">
+              <Link
+                to="/forgot-password"
+                className="font-medium text-oc-teal hover:text-oc-steel"
+              >
+                Forgot your password?
+              </Link>
+            </div>
           </div>
 
           <Button

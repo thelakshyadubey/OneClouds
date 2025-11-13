@@ -107,6 +107,24 @@ class RevokeAllSessions(BaseModel):
 class UserDeleteAccount(BaseModel):
     current_password: str
 
+# Password reset and email verification schemas
+class ForgotPasswordRequest(BaseModel):
+    email: EmailStr
+
+class ResetPasswordRequest(BaseModel):
+    token: str
+    new_password: str
+    confirm_password: str
+
+    @validator('confirm_password')
+    def passwords_match(cls, v, values, **kwargs):
+        if 'new_password' in values and v != values['new_password']:
+            raise ValueError('Passwords do not match')
+        return v
+
+class VerifyEmailRequest(BaseModel):
+    token: str
+
 # Storage Account schemas
 class StorageAccountBase(BaseModel):
     provider: str

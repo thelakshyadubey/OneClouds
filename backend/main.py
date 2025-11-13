@@ -5,6 +5,7 @@ Main FastAPI application with comprehensive cloud storage integration
 
 import os
 import secrets
+import pyotp
 from datetime import datetime, timedelta, timezone
 from typing import List, Optional, Dict, Any
 import logging
@@ -36,6 +37,7 @@ from backend.models import User, StorageAccount, FileMetadata, SyncLog, UserSess
 from backend.storage_providers import get_provider_class, SUPPORTED_PROVIDERS
 from backend.auth import AuthHandler # Use AuthHandler instance directly
 from backend.utils import SecurityUtils, FileUtils, fm # Import fm for sending emails
+from backend.email_service import email_service  # Import email service
 import backend.schemas as schemas # Import schemas as an alias to resolve NameError
 
 from backend.audit_logger import AuditLogger # Added for audit logging
@@ -116,10 +118,10 @@ async def health_check():
     return {"status": "healthy", "timestamp": datetime.utcnow().isoformat()}
 
 # Authentication endpoints
-@app.post("/api/auth/register", response_model=schemas.TokenResponse, status_code=status.HTTP_201_CREATED)
+@app.post("/api/auth/register", response_model=schemas.GenericResponse, status_code=status.HTTP_201_CREATED)
 async def register(user_register: schemas.UserRegister, request: Request, db: Session = Depends(get_db)):
-    """Register a new user - simplified without OTP"""
-    print(f"DEBUG: Incoming registration data: {user_register.model_dump_json()}") # Log incoming data
+    """Register a new user - sends OTP for email verification"""
+    print(f"DEBUG: Incoming registration data: {user_register.model_dump_json()}")
     try:
         if user_register.password != user_register.confirm_password:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match")
@@ -133,48 +135,124 @@ async def register(user_register: schemas.UserRegister, request: Request, db: Se
 
         hashed_password = auth_handler.hash_password(user_register.password)
 
+        # Generate OTP secret and code
+        otp_secret = pyotp.random_base32()
+        totp = pyotp.TOTP(otp_secret, interval=600)  # 10 minutes validity
+        otp_code = totp.now()
+
         new_user = User(
             email=user_register.email,
             name=user_register.name,
             hashed_password=hashed_password,
-            is_active=True, # User is active immediately (no OTP verification)
+            is_active=False,  # User is inactive until OTP verification
             is_2fa_enabled=False,
-            mode="full_access" # New users start in full_access mode
+            otp_secret=otp_secret,
+            mode="full_access"  # New users start in full_access mode
         )
         db.add(new_user)
         db.commit()
         db.refresh(new_user)
 
-        # Generate tokens immediately
-        access_token = auth_handler.create_token(data={"user_id": new_user.id}, token_type="access")
-        refresh_token = auth_handler.create_token(data={"user_id": new_user.id}, token_type="refresh")
+        # Send OTP via email
+        email_sent = email_service.send_2fa_code_email(
+            to_email=new_user.email,
+            code=otp_code
+        )
 
-        logger.info(f"User {new_user.email} registered successfully.")
+        if not email_sent:
+            logger.error(f"Failed to send OTP email to {new_user.email}")
+            # Don't fail registration, user can request resend
+            
+        logger.info(f"User {new_user.email} registered. OTP sent for verification.")
+        return schemas.GenericResponse(
+            message=f"Registration successful! Please check your email ({new_user.email}) for the OTP code to verify your account. The code is valid for 10 minutes."
+        )
+    except EmailNotValidError as e:
+        print(f"DEBUG: Email validation error: {e}")
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"DEBUG: Unexpected error during registration: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
+
+@app.post("/api/auth/verify-otp", response_model=schemas.TokenResponse)
+async def verify_registration_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
+    """Verify OTP and activate user account after registration"""
+    try:
+        user = db.query(User).filter(User.email == otp_verification.email).first()
+        
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        
+        if user.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account already verified.")
+        
+        # Verify OTP
+        totp = pyotp.TOTP(user.otp_secret, interval=600)  # 10 minutes validity
+        if not totp.verify(otp_verification.otp, valid_window=1):
+            raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid or expired OTP.")
+        
+        # Activate user
+        user.is_active = True
+        db.commit()
+        db.refresh(user)
+        
+        # Generate tokens
+        access_token = auth_handler.create_token(data={"user_id": user.id}, token_type="access")
+        refresh_token = auth_handler.create_token(data={"user_id": user.id}, token_type="refresh")
+
+        logger.info(f"User {user.email} verified and activated successfully.")
         return schemas.TokenResponse(
             access_token=access_token,
             refresh_token=refresh_token,
             token_type="bearer",
-            user_id=new_user.id,
-            email=new_user.email,
+            user_id=user.id,
+            email=user.email,
             expires_in=settings.ACCESS_TOKEN_EXPIRE_MINUTES * 60,
             requires_2fa=False,
             device_trusted=True
         )
-    except EmailNotValidError as e:
-        print(f"DEBUG: Email validation error: {e}") # Log email validation error
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid email address format.")
     except HTTPException as e:
-        # Allow FastAPI's HTTPException to propagate as is
         raise e
     except Exception as e:
-        logger.error(f"DEBUG: Unexpected error during registration: {e}", exc_info=True) # Log full exception info
-        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=f"An unexpected error occurred: {e}")
+        logger.error(f"Error verifying OTP: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to verify OTP.")
 
-# OTP verification endpoints disabled for testing - will be re-implemented later
-# @app.post("/api/auth/verify-otp", response_model=schemas.TokenResponse)
-# async def verify_otp(otp_verification: schemas.OTPVerification, request: Request, db: Session = Depends(get_db)):
-#     """Verify OTP and activate user account, then return tokens."""
-#     pass
+@app.post("/api/auth/resend-otp", response_model=schemas.GenericResponse)
+async def resend_registration_otp(email_request: schemas.ForgotPasswordRequest, request: Request, db: Session = Depends(get_db)):
+    """Resend OTP for email verification"""
+    try:
+        user = db.query(User).filter(User.email == email_request.email).first()
+        
+        if not user:
+            # Don't reveal if email exists
+            return schemas.GenericResponse(message="If your email is registered and not verified, you will receive a new OTP.")
+        
+        if user.is_active:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Account already verified.")
+        
+        # Generate new OTP
+        totp = pyotp.TOTP(user.otp_secret, interval=600)
+        otp_code = totp.now()
+        
+        # Send OTP via email
+        email_sent = email_service.send_2fa_code_email(
+            to_email=user.email,
+            code=otp_code
+        )
+        
+        if not email_sent:
+            logger.error(f"Failed to resend OTP email to {user.email}")
+            raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to send OTP email.")
+        
+        logger.info(f"OTP resent to {user.email}")
+        return schemas.GenericResponse(message="OTP has been resent to your email.")
+    except HTTPException as e:
+        raise e
+    except Exception as e:
+        logger.error(f"Error resending OTP: {e}", exc_info=True)
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to resend OTP.")
 
 @app.post("/api/auth/login", response_model=schemas.TokenResponse)
 async def login(user_login: schemas.UserLogin, request: Request, db: Session = Depends(get_db)):
@@ -367,6 +445,125 @@ async def refresh_access_token(refresh_token: str, request: Request, db: Session
         device_trusted=True # Assume device is trusted if refresh token is valid
     )
 
+# Password Reset Endpoints
+@app.post("/api/auth/forgot-password", response_model=schemas.GenericResponse)
+async def forgot_password(request_data: schemas.ForgotPasswordRequest, db: Session = Depends(get_db)):
+    """Send password reset email with token"""
+    try:
+        user = db.query(User).filter(User.email == request_data.email).first()
+        
+        # Always return success even if user doesn't exist (security best practice)
+        if not user:
+            logger.warning(f"Password reset requested for non-existent email: {request_data.email}")
+            return schemas.GenericResponse(message="If the email exists, a password reset link has been sent.")
+        
+        # Create password reset token (1 hour expiry)
+        reset_token = auth_handler.create_token(
+            data={"user_id": user.id, "email": user.email, "type": "password_reset"},
+            token_type="access",  # Use access token type but with custom expiry
+            expires_minutes=settings.PASSWORD_RESET_TOKEN_EXPIRE_MINUTES
+        )
+        
+        # Send email
+        email_sent = email_service.send_password_reset_email(user.email, reset_token)
+        
+        if not email_sent:
+            logger.error(f"Failed to send password reset email to {user.email}")
+            # Don't expose email sending failure to user
+        
+        logger.info(f"Password reset email sent to {user.email}")
+        return schemas.GenericResponse(message="If the email exists, a password reset link has been sent.")
+    
+    except Exception as e:
+        logger.error(f"Error in forgot_password: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to process password reset request.")
+
+@app.post("/api/auth/reset-password", response_model=schemas.GenericResponse)
+async def reset_password(reset_data: schemas.ResetPasswordRequest, db: Session = Depends(get_db)):
+    """Reset password using token from email"""
+    try:
+        # Verify reset token
+        payload = auth_handler.verify_token(reset_data.token, token_type="access")
+        
+        if not payload or payload.get("type") != "password_reset":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired reset token.")
+        
+        user_id = payload.get("user_id")
+        email = payload.get("email")
+        
+        user = db.query(User).filter(User.id == user_id, User.email == email).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        
+        # Validate new password
+        if reset_data.new_password != reset_data.confirm_password:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Passwords do not match.")
+        
+        if len(reset_data.new_password) < 8:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Password must be at least 8 characters long.")
+        
+        # Update password
+        user.hashed_password = auth_handler.hash_password(reset_data.new_password)
+        db.commit()
+        
+        # Invalidate all existing sessions for security
+        db.query(UserSession).filter(UserSession.user_id == user.id).delete()
+        db.query(TrustedDevice).filter(TrustedDevice.user_id == user.id).delete()
+        db.commit()
+        
+        # Send notification email
+        email_service.send_password_changed_notification(user.email)
+        
+        logger.info(f"Password reset successfully for user {user.email}")
+        return schemas.GenericResponse(message="Password reset successfully. Please log in with your new password.")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in reset_password: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to reset password.")
+
+@app.post("/api/auth/verify-email", response_model=schemas.GenericResponse)
+async def verify_email(verify_data: schemas.VerifyEmailRequest, db: Session = Depends(get_db)):
+    """Verify new email address using token from email"""
+    try:
+        # Verify email verification token
+        payload = auth_handler.verify_token(verify_data.token, token_type="access")
+        
+        if not payload or payload.get("type") != "email_verification":
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid or expired verification token.")
+        
+        user_id = payload.get("user_id")
+        new_email = payload.get("new_email")
+        
+        user = db.query(User).filter(User.id == user_id).first()
+        if not user:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User not found.")
+        
+        # Check if new email is already in use
+        existing_user = db.query(User).filter(User.email == new_email).first()
+        if existing_user:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address is already in use.")
+        
+        # Update email
+        old_email = user.email
+        user.email = new_email
+        db.commit()
+        
+        # Invalidate all existing sessions for security
+        db.query(UserSession).filter(UserSession.user_id == user.id).delete()
+        db.query(TrustedDevice).filter(TrustedDevice.user_id == user.id).delete()
+        db.commit()
+        
+        logger.info(f"Email changed from {old_email} to {new_email} for user ID {user.id}")
+        return schemas.GenericResponse(message="Email verified successfully. Please log in with your new email address.")
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error in verify_email: {e}")
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Failed to verify email.")
+
 # User Mode Endpoints
 @app.get("/api/user/mode", response_model=schemas.ModeUpdate)
 async def get_user_mode(current_user: User = Depends(get_current_user)):
@@ -432,7 +629,7 @@ async def update_user_email(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update the current user's email address."""
+    """Update the current user's email address - sends verification email to new address"""
     # 1. Verify current password
     if not auth_handler.verify_password(email_update.current_password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid current password.")
@@ -450,33 +647,45 @@ async def update_user_email(
     if existing_user_with_new_email:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="This email address is already registered.")
 
-    # 3. Invalidate all sessions (force re-login after email change for security)
-    db.query(UserSession).filter(UserSession.user_id == current_user.id).delete()
-    db.query(TrustedDevice).filter(TrustedDevice.user_id == current_user.id).update({TrustedDevice.is_active: False})
+    # 3. Create email verification token (24 hours expiry)
+    verification_token = auth_handler.create_token(
+        data={
+            "user_id": current_user.id,
+            "new_email": valid_new_email,
+            "type": "email_verification"
+        },
+        token_type="access",
+        expires_minutes=settings.EMAIL_VERIFICATION_TOKEN_EXPIRE_MINUTES
+    )
     
-    # 4. Update user's email and mark as inactive until new email is verified
-    current_user.email = valid_new_email
-    current_user.is_active = False
-    current_user.email_verification_token = secrets.token_urlsafe(32)
-    current_user.email_verification_expires_at = datetime.utcnow() + timedelta(minutes=settings.OTP_TTL_MINUTES)
-    db.commit()
-    db.refresh(current_user)
-
-    # 5. Send new OTP to the new email address for verification
-    otp = security_utils.generate_otp(current_user.otp_secret)
-    background_tasks.add_task(security_utils.send_otp_email, current_user.email, otp)
+    # 4. Send verification email to NEW email address
+    email_sent = email_service.send_email_verification_email(
+        to_email=valid_new_email,
+        verification_token=verification_token,
+        new_email=valid_new_email
+    )
+    
+    if not email_sent:
+        logger.error(f"Failed to send email verification to {valid_new_email}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to send verification email. Please try again later."
+        )
 
     AuditLogger.log_security_event(
         event_type="USER_EMAIL_CHANGE_INITIATED",
         details={
             "user_id": current_user.id,
-            "old_email": current_user.email, # This will log the old email
+            "old_email": current_user.email,
             "new_email": valid_new_email,
             "timestamp": datetime.utcnow().isoformat()
         }
     )
+    
     logger.info(f"User {current_user.email} initiated email change to {valid_new_email}. Verification email sent.")
-    return schemas.GenericResponse(message="Email change initiated. Please check your new email for verification to reactivate your account.")
+    return schemas.GenericResponse(
+        message=f"Verification email sent to {valid_new_email}. Please check your inbox and click the verification link."
+    )
 
 @app.put("/api/user/password", response_model=schemas.GenericResponse, status_code=status.HTTP_200_OK)
 async def update_user_password(
@@ -485,7 +694,7 @@ async def update_user_password(
     current_user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
-    """Update the current user's password."""
+    """Update the current user's password - sends notification email"""
     # 1. Verify current password
     if not auth_handler.verify_password(password_update.current_password, current_user.hashed_password):
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Invalid current password.")
@@ -503,6 +712,15 @@ async def update_user_password(
     db.query(UserSession).filter(UserSession.user_id == current_user.id).delete()
     db.query(TrustedDevice).filter(TrustedDevice.user_id == current_user.id).update({TrustedDevice.is_active: False})
     db.commit()
+
+    # 5. Send password changed notification email
+    email_sent = email_service.send_password_changed_notification(
+        to_email=current_user.email
+    )
+    
+    if not email_sent:
+        logger.warning(f"Failed to send password change notification to {current_user.email}")
+        # Don't fail the request, password was already changed
 
     AuditLogger.log_security_event(
         event_type="USER_PASSWORD_CHANGE",
@@ -677,21 +895,17 @@ async def initiate_auth(
     current_user: User = Depends(get_current_user)
 ):
     """Initiate OAuth flow for a cloud provider"""
+    print(f"DEBUG (initiate_auth): Received provider='{provider}', mode='{mode}'")
+    logger.info(f"Initiating auth for provider='{provider}', mode='{mode}', user_id={current_user.id}")
+    
     if provider not in SUPPORTED_PROVIDERS:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported provider: {provider}")
 
     if mode not in ["metadata", "full_access"]:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"Unsupported mode: {mode}. Must be 'metadata' or 'full_access'.")
     
-    # Enforce mode access: if user is in metadata mode, they can only connect metadata accounts
-    if current_user.mode == "metadata" and mode == "full_access":
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="Cannot connect full access account while in metadata mode. Switch mode in settings first."
-        )
-    elif current_user.mode == "full_access" and mode == "metadata":
-        # Allow connecting metadata account even if in full access mode for flexibility
-        pass
+    # Users can connect accounts in any mode regardless of their user mode setting
+    # The user mode is just a preference and doesn't restrict account connections
 
     try:
         # Map frontend mode to backend config key
@@ -833,6 +1047,32 @@ async def auth_callback(
 
         # Get user info from the cloud provider (this gives the external account's email)
         user_info = await temp_provider_instance.get_user_info()
+        
+        # IMPORTANT: Check if there's an existing account with the same provider and email but DIFFERENT mode
+        # This happens when switching modes - we need to disconnect the old mode's account
+        existing_account_different_mode = db.query(StorageAccount).filter(
+            and_(
+                StorageAccount.user_id == user.id,
+                StorageAccount.provider == provider,
+                StorageAccount.account_email == user_info["email"],
+                StorageAccount.mode != mode  # Different mode than what we're connecting
+            )
+        ).first()
+        
+        if existing_account_different_mode:
+            # Disconnect the old account by marking files inactive and deleting the account
+            print(f"DEBUG (auth_callback): Found existing account in {existing_account_different_mode.mode} mode, disconnecting it...")
+            logger.info(f"Mode switch detected for {provider} ({user_info['email']}). Disconnecting old {existing_account_different_mode.mode} mode account.")
+            
+            # Mark all files from the old account as inactive instead of deleting
+            db.query(FileMetadata).filter(
+                FileMetadata.storage_account_id == existing_account_different_mode.id
+            ).update({"is_active": False})
+            
+            # Delete the old storage account
+            db.delete(existing_account_different_mode)
+            db.commit()
+            print(f"DEBUG (auth_callback): Old account disconnected successfully")
         
         # Find or create storage account associated with the specific user, external email, AND MODE
         storage_account = db.query(StorageAccount).filter(

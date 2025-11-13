@@ -4,8 +4,8 @@ import api from "../services/api";
 import FileIcon from "../components/FileIcon";
 import { useLocation, useNavigate } from "react-router-dom";
 import toast from "react-hot-toast"; // Corrected import for toast
-import { IconButton, Menu, MenuItem } from "@mui/material";
-import { FaDownload, FaTrash, FaInfoCircle, FaEllipsisV } from "react-icons/fa"; // Import new icons
+import { IconButton } from "@mui/material";
+import { FaTrash } from "react-icons/fa"; // Import icons
 
 // Skeleton loader for a single file row
 const FileRowSkeleton = () => (
@@ -46,10 +46,9 @@ const Files = () => {
   const location = useLocation(); // Initialize useLocation
   const navigate = useNavigate(); // Initialize useNavigate
   const [selectedMode, setSelectedMode] = useState(null); // State to store the selected mode
-  const [anchorEl, setAnchorEl] = useState(null); // For the action menu
-  const [selectedFile, setSelectedFile] = useState(null); // File for which the menu is open
   const [showDeleteRestrictionModal, setShowDeleteRestrictionModal] =
     useState(false); // New state for delete restriction modal
+  const [selectedFile, setSelectedFile] = useState(null); // File for delete restriction modal
 
   const fetchFiles = useCallback(async () => {
     // Wrap in useCallback
@@ -105,18 +104,6 @@ const Files = () => {
     }
   };
 
-  const handleDownload = (file) => {
-    if (file.storage_account && file.storage_account.mode === "metadata") {
-      toast.error("File download is not available in Metadata Mode.");
-      return;
-    }
-    if (file.download_link) {
-      window.open(file.download_link, "_blank");
-    } else {
-      toast.error("Download link not available.");
-    }
-  };
-
   const handleDelete = async (file) => {
     // Check if the file belongs to a metadata mode account
     if (file.storage_account && file.storage_account.mode === "metadata") {
@@ -156,22 +143,6 @@ const Files = () => {
       "Redirecting to settings to switch to Full Management Mode. You will need to re-authenticate."
     );
     navigate("/settings");
-  };
-
-  const handleFileDetails = (file) => {
-    // Implement modal or new page for file details
-    toast.info(`Showing details for ${file.name}`);
-    console.log("File details:", file);
-  };
-
-  const handleMenuClick = (event, file) => {
-    setAnchorEl(event.currentTarget);
-    setSelectedFile(file);
-  };
-
-  const handleMenuClose = () => {
-    setAnchorEl(null);
-    setSelectedFile(null);
   };
 
   const formatDate = (dateString) => {
@@ -327,59 +298,15 @@ const Files = () => {
                         </IconButton>
                       )}
                       <IconButton
-                        aria-label="more actions"
-                        aria-controls="long-menu"
-                        aria-haspopup="true"
-                        onClick={(event) => handleMenuClick(event, file)}
+                        onClick={() => handleDelete(file)}
+                        color="error"
                         size="small"
-                        title="More Actions"
+                        aria-label="delete"
+                        title="Delete File"
+                        disabled={file.storage_account?.mode === "metadata"}
                       >
-                        <FaEllipsisV />
+                        <FaTrash />
                       </IconButton>
-                      <Menu
-                        id="long-menu"
-                        MenuListProps={{ "aria-labelledby": "long-button" }}
-                        anchorEl={anchorEl}
-                        open={Boolean(anchorEl) && selectedFile?.id === file.id}
-                        onClose={handleMenuClose}
-                        PaperProps={{
-                          style: {
-                            maxHeight: 48 * 4.5,
-                            width: "20ch",
-                          },
-                        }}
-                      >
-                        <MenuItem
-                          onClick={() => {
-                            handleDownload(selectedFile);
-                            handleMenuClose();
-                          }}
-                          disabled={
-                            selectedFile?.storage_account?.mode === "metadata"
-                          }
-                        >
-                          <FaDownload className="mr-2" /> Download
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() => {
-                            handleDelete(selectedFile);
-                            handleMenuClose();
-                          }}
-                          disabled={
-                            selectedFile?.storage_account?.mode === "metadata"
-                          }
-                        >
-                          <FaTrash className="mr-2" /> Delete
-                        </MenuItem>
-                        <MenuItem
-                          onClick={() => {
-                            handleFileDetails(selectedFile);
-                            handleMenuClose();
-                          }}
-                        >
-                          <FaInfoCircle className="mr-2" /> Details
-                        </MenuItem>
-                      </Menu>
                     </div>
                   </td>
                 </tr>

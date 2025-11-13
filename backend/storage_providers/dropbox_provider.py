@@ -227,98 +227,25 @@ class DropboxProvider(CloudStorageProvider):
         return {}
     
     async def normalize_dropbox_metadata(self, file_metadata: dropbox.files.FileMetadata) -> Dict[str, Any]:
-        """Normalize Dropbox file metadata"""
-        # Get preview link if possible
-        preview_link = None
-        download_link = None
+        """Normalize Dropbox file metadata to match privacy-preserving pattern like Google Drive"""
+        # For privacy: Only generate web_view_link (requires user login to view)
+        # No preview_link or download_link generation to preserve user privacy
         web_view_link = None
         
-        # For metadata mode: Try to get shared links (read-only, doesn't require sharing.write)
-        # For full_access mode: Try to create shared links
-        if self.mode == "metadata":
-            try:
-                # Try to get existing shared links first (works with metadata scope)
-                existing_links = self.dbx.sharing_list_shared_links(path=file_metadata.path_lower)
-                if existing_links.links:
-                    web_view_link = existing_links.links[0].url
-                    # Create a direct download link from shared link
-                    download_link = web_view_link.replace('?dl=0', '?dl=1')
-                    preview_link = web_view_link
-                    print(f"DEBUG: Found existing shared link for {file_metadata.name}: {web_view_link}")
-                else:
-                    # If no existing links, construct a Dropbox preview URL
-                    # This will open the file in Dropbox web interface (requires user to be logged in)
-                    import urllib.parse
-                    file_path = file_metadata.path_display
-                    # Encode the path for URL
-                    encoded_path = urllib.parse.quote(file_path)
-                    web_view_link = f"https://www.dropbox.com/preview{encoded_path}"
-                    preview_link = web_view_link
-                    print(f"DEBUG: Generated preview link for {file_metadata.name}: {web_view_link}")
-            except Exception as e:
-                print(f"DEBUG: Failed to get Dropbox preview link for {file_metadata.name}: {e}")
-                # Fallback: construct preview URL
-                try:
-                    import urllib.parse
-                    file_path = file_metadata.path_display
-                    encoded_path = urllib.parse.quote(file_path)
-                    web_view_link = f"https://www.dropbox.com/preview{encoded_path}"
-                    preview_link = web_view_link
-                    print(f"DEBUG: Fallback preview URL for {file_metadata.name}: {web_view_link}")
-                except:
-                    pass
-        elif self.mode == "full_access":
-            try:
-                # Get shared link for preview (Dropbox SDK is synchronous)
-                shared_link = self.dbx.sharing_create_shared_link_with_settings(
-                    file_metadata.path_lower,
-                    dropbox.sharing.SharedLinkSettings(
-                        require_password=False,
-                        link_password=None,
-                        expires=None
-                    )
-                )
-                web_view_link = shared_link.url
-                
-                # Create direct download link
-                download_link = shared_link.url.replace('?dl=0', '?dl=1')
-                preview_link = web_view_link
-                print(f"DEBUG: Created shared link for {file_metadata.name}: {web_view_link}")
-                
-            except Exception as e:
-                # Catch ALL exceptions (ApiError, BadInputError, etc.)
-                print(f"DEBUG: Failed to create shared link for {file_metadata.name}: {e}")
-                # Link might already exist or sharing not allowed, or app doesn't have permission
-                try:
-                    # Try to get existing shared links
-                    existing_links = self.dbx.sharing_list_shared_links(path=file_metadata.path_lower)
-                    if existing_links.links:
-                        web_view_link = existing_links.links[0].url
-                        download_link = web_view_link.replace('?dl=0', '?dl=1')
-                        preview_link = web_view_link
-                        print(f"DEBUG: Found existing shared link for {file_metadata.name}: {web_view_link}")
-                    else:
-                        # Final fallback to preview URL
-                        import urllib.parse
-                        file_path = file_metadata.path_display
-                        encoded_path = urllib.parse.quote(file_path)
-                        web_view_link = f"https://www.dropbox.com/preview{encoded_path}"
-                        preview_link = web_view_link
-                        print(f"DEBUG: Fallback preview URL for {file_metadata.name}: {web_view_link}")
-                except Exception as e2:
-                    print(f"DEBUG: Failed to get existing links for {file_metadata.name}: {e2}")
-                    # Final fallback to preview URL
-                    try:
-                        import urllib.parse
-                        file_path = file_metadata.path_display
-                        encoded_path = urllib.parse.quote(file_path)
-                        web_view_link = f"https://www.dropbox.com/preview{encoded_path}"
-                        preview_link = web_view_link
-                        print(f"DEBUG: Final fallback preview URL for {file_metadata.name}: {web_view_link}")
-                    except:
-                        pass
+        # Construct a Dropbox web view URL (requires user to be logged in to Dropbox)
+        # This is similar to Google Drive's webViewLink behavior
+        try:
+            import urllib.parse
+            file_path = file_metadata.path_display
+            # Encode the path for URL
+            encoded_path = urllib.parse.quote(file_path)
+            # Use Dropbox's home URL pattern which requires authentication
+            web_view_link = f"https://www.dropbox.com/home{encoded_path}"
+            print(f"DEBUG: Generated privacy-preserving web view link for {file_metadata.name}: {web_view_link}")
+        except Exception as e:
+            print(f"DEBUG: Failed to generate web view link for {file_metadata.name}: {e}")
         
-        print(f"DEBUG normalize_dropbox_metadata FINAL: name={file_metadata.name}, web_view_link={web_view_link}, preview_link={preview_link}")
+        print(f"DEBUG normalize_dropbox_metadata FINAL: name={file_metadata.name}, web_view_link={web_view_link}, preview_link=None (privacy mode)")
         
         return {
             'provider_file_id': file_metadata.path_lower,  # Use path as ID for Dropbox
@@ -329,9 +256,9 @@ class DropboxProvider(CloudStorageProvider):
             'file_extension': self.get_file_extension(file_metadata.name),
             'created_at': None,  # Dropbox doesn't provide creation time
             'modified_at': file_metadata.server_modified,
-            'preview_link': preview_link,
-            'download_link': download_link,
-            'web_view_link': web_view_link,
+            'preview_link': None,  # Privacy: No direct preview links
+            'download_link': None,  # Privacy: No direct download links
+            'web_view_link': web_view_link,  # Only authenticated web view link
             'content_hash': file_metadata.content_hash
         }
     
